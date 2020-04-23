@@ -87,10 +87,20 @@ params['mp'].remove_close = False
 params['mp'].quantize_FCs = True
 params['mp'].wavecal_coeffs = [1.e9 / 6, -250]
 
-def get_form_photons(fields, dp, photons_save, mp, comps=True):
+def get_form_photons(fields, cam, comps=True):
+    """
+    Alternative to cam.__call__ that allows the user to specify whether the spectracube contains the planets
+
+    :param fields: ndarray
+    :param cam: mkids.Camera()
+    :param comps: bool
+
+    :return:
+    mkids.Camera()
+    """
     ntime, nwave = fields.shape[0], fields.shape[1]
 
-    stackcube = np.zeros((ntime, nwave, dp.array_size[1], dp.array_size[0]))
+    cam.stackcube = np.zeros((ntime, nwave, cam.array_size[1], cam.array_size[0]))
     for step in range(len(fields)):
         print(step)
         if comps:
@@ -98,12 +108,12 @@ def get_form_photons(fields, dp, photons_save, mp, comps=True):
         else:
             spectralcube = fields[step, :, 0]
 
-        step_packets = mkids.get_packets(spectralcube, step, dp, mp)
-        cube = mkids.make_datacube_from_list(step_packets, (nwave,dp.array_size[0],dp.array_size[1]))
-        stackcube[step] = cube
+        # step_packets = mkids.get_packets(spectralcube, step, dp, mp)
+        # cube = mkids.make_datacube_from_list(step_packets, (nwave,dp.array_size[0],dp.array_size[1]))
+        step_packets = cam.get_packets(spectralcube, step)
+        cube = cam.make_datacube_from_list(step_packets)
+        cam.stackcube[step] = cube
 
-    with open(photons_save, 'wb') as handle:
-        # dprint((photons_save, stackcube.shape, dp))
-        pickle.dump((stackcube, dp), handle, protocol=pickle.HIGHEST_PROTOCOL)
+    cam.save()
 
-    return stackcube, dp
+    return cam
