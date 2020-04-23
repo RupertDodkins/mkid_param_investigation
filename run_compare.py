@@ -9,17 +9,19 @@ from vip_hci.metrics.contrcurve import noise_per_annulus
 
 import medis.MKIDs as mkids
 import medis.medis_main as mm
+from medis.telescope import Telescope
 from medis.utils import dprint
 from medis.plot_tools import quick2D, quicklook_wf, view_spectra
 
 from master2 import params, get_form_photons
 
+params['tp'].prescription = 'general_telescope'
 params['sp'].save_to_disk = True
 params['sp'].numframes = 1
 params['ap'].n_wvl_init = 3
 params['ap'].n_wvl_final = 3
 
-investigation = 'figure3'
+investigation = 'figure3_2'
 
 
 class ObservatoryMaster():
@@ -28,20 +30,26 @@ class ObservatoryMaster():
         self.params = params
         self.name = str(iteration)
         self.masterdir = os.path.join(params['iop'].datadir, investigation, self.name, 'master')
+        self.save_extension = 'camera.pkl'
+        self.fields_extension = 'fields.pkl'
 
         # self.params['iop'].update(self.masterdir)
-        self.params['iop'].form_photons = os.path.join(self.masterdir, 'formatted_photons_master.pkl')
-        self.params['iop'].device = os.path.join(self.masterdir, 'deviceParams_master.pkl')
+        # self.params['iop'].form_photons = os.path.join(self.masterdir, 'formatted_photons_master.pkl')
+        # self.params['iop'].device = os.path.join(self.masterdir, 'deviceParams_master.pkl')
         self.params['iop'].median_noise = os.path.join(self.masterdir, 'median_noise_master.txt')
+        self.params['iop'].camera = os.path.join(self.masterdir, self.save_extension)
+        self.params['iop'].fields = os.path.join(self.masterdir, self.fields_extension)
 
-        self.make_fields_master(self.params['iop'].testdir)
+        self.make_fields_master()
 
         # make master dp
-        if not os.path.exists(self.params['iop'].device):
-            self.dp = mkids.initialize()
-        else:
-            with open(self.params['iop'].device, 'rb') as handle:
-                self.dp = pickle.load(handle)
+        # if not os.path.exists(self.params['iop'].device):
+        #     self.dp = mkids.initialize()
+        # else:
+        #     with open(self.params['iop'].device, 'rb') as handle:
+        #         self.dp = pickle.load(handle)
+        dprint(self.params['iop'].fields)
+        self.cam = mkids.Camera(params)
 
         if not os.path.exists(self.params['iop'].median_noise):
             self.get_median_noise()
@@ -58,6 +66,9 @@ class ObservatoryMaster():
 
         dprint(self.params['iop'].fields, self.params['iop'].device)
         comps = False
+
+        cam = mkids.Camera(self.params['iop'].__dict__)
+        stackcube = cam.stackcube
         if os.path.exists(self.params['iop'].form_photons):
             dprint(f"Formatted photon data already exists at {self.params['iop'].form_photons}")
             with open(self.params['iop'].form_photons, 'rb') as handle:
@@ -112,42 +123,34 @@ class ObservatoryMaster():
     #
     #     return stackcube, self.dp
 
-    def make_fields_master(self, name):
+    def make_fields_master(self, plot=False):
         """ The master fields file of which all the photons are seeded from according to their device
 
         :return:
         """
 
-        sim = mm.RunMedis(params=self.params, name=self.masterdir, product='fields')
-        observation = sim()
-        self.fields = observation['fields'][:,-1]  # slice out final plane
-        self.fields = np.abs(self.fields**2)
+        # sim = mm.RunMedis(params=self.params, name=self.masterdir, product='fields')
+        # observation = sim()
+        self.params['iop'].update(self.masterdir)
+        telescope = Telescope(params)
+        observation = telescope()
 
-        tess = np.abs(np.sum(self.fields, axis=2)**2)
-        view_spectra(tess[0], logZ=True, show=False)
-        view_spectra(tess[:,0], logZ=True, show=True)
+        obs_seq = np.abs(observation['fields'][:, -1]) ** 2
 
-        # plt.plot(np.sum(self.fields, axis = (0,1,3,4)))
-        # plt.show()
-        dprint(self.fields.shape)
-        if self.fields.shape[3] == len(self.params['ap'].contrast)+1:
-            obs_seq = np.abs(self.fields[:, -1]) ** 2
-            dprint(self.fields.shape)
-            tess = np.sum(obs_seq[:, :, 1:], axis=2)
-            # view_spectra(tess[0], logAmp=True, show=False)
-            double_cube = np.zeros((self.params['sp'].numframes, self.params['ap'].n_wvl_final, 2, self.params['sp'].grid_size,
-                                    self.params['sp'].grid_size))
-            double_cube[:, :, 0] = obs_seq[:, :, 0]
-            collapse_comps = np.sum(obs_seq[:, :, 1:], axis=2)
-            double_cube[:, :, 1] = collapse_comps
-            view_spectra(double_cube[0,:,0], logAmp=True, show=False)
-            view_spectra(double_cube[0,:,1], logAmp=True, show=True)
-            print(f"Reduced shape of obs_seq = {np.shape(double_cube)} (numframes x nwsamp x 2 x grid x grid)")
-            mkids.save_fields(double_cube, fields_file=self.params['iop'].fields)
-        # else:
-        #     view_spectra(self.fields[0, :, 0], logAmp=True, show=False)
-        #     view_spectra(self.fields[0, :, 1], logAmp=True, show=True)
-        #     # view_spectra(self.fields[:, -1, 2], logAmp=True, show=False)
+        double_cube = np.zeros((self.params['sp'].numframes, self.params['ap'].n_wvl_final, 2, self.params['sp'].grid_size,
+                                self.params['sp'].grid_size))
+        collapse_comps = np.sum(obs_seq[:, :, 1:], axis=2)
+        double_cube[:, :, 0] = obs_seq[:, :, 0]
+        double_cube[:, :, 1] = collapse_comps
+        if plot:
+            view_spectra(double_cube[0,:,0], logZ=True, show=True, title='star cube timestep 0')
+            view_spectra(double_cube[0,:,1], logZ=True, show=True, title='planets cube timestep 0')
+
+        dprint(f"Reduced shape of obs_seq = {np.shape(double_cube)} (numframes x nwsamp x 2 x grid x grid)")
+
+        os.rename(self.params['iop'].fields, os.path.join(self.masterdir, 'fields_planet_slices.h5'))
+        telescope.save_fields(double_cube)
+
 
 class Camera():
     """ This instrument has the magical ability to quickly tune one device parameter during an observation """
