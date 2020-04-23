@@ -9,16 +9,18 @@ import medis.medis_main as mm
 from master2 import params
 
 params['sp'].save_to_disk = True
+params['tp'].prescription = 'general_telescope'
 params['sp'].numframes = 1
 params['ap'].n_wvl_init = 3
 params['ap'].n_wvl_final = 3
 params['sp'].memory_limit = 9.e9 /15
 params['sp'].save_list = np.array(['atmosphere', 'add_aber', 'deformable mirror', 'add_aber', 'pre_coron', 'detector'])
 save_labels = np.array(['Entrance Pupil', 'After CPA', 'After DM', 'After NCPA', 'Before Occult.', 'Detector'])
+params['tp'].use_atmos = True
 
 if __name__ == '__main__':  # required for multiprocessing - make sure globals are set before though
 
-    sim = mm.RunMedis(params=params, name='figure1', product='fields')
+    sim = mm.RunMedis(params=params, name='figure1_2', product='fields')
     observation = sim()
     cpx_sequence = observation['fields']
 
@@ -37,7 +39,7 @@ if __name__ == '__main__':  # required for multiprocessing - make sure globals a
         for i in range(2,4):
             im2 = axes[i, j].imshow(spectral_train_grid[i, j], cmap=sunlight, vmin=-1, vmax=1)
         for i in range(4,6):
-            im3 = axes[i,j].imshow(spectral_train_grid[i,j], cmap='inferno', norm=LogNorm(), vmin=1e-4, vmax=5)
+            im3 = axes[i,j].imshow(spectral_train_grid[i,j], cmap='inferno', norm=LogNorm(), vmin=1e-8, vmax=1e-3)
 
     [[axes[i, j].axis('off') for i in range(6)] for j in range(3)]
 
