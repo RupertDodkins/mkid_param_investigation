@@ -40,7 +40,7 @@ class ObservatoryMaster():
         self.params['iop'].camera = os.path.join(self.masterdir, self.save_extension)
         self.params['iop'].fields = os.path.join(self.masterdir, self.fields_extension)
 
-        self.make_fields_master()
+        self.fields = self.make_fields_master()
 
         # make master dp
         # if not os.path.exists(self.params['iop'].device):
@@ -49,7 +49,7 @@ class ObservatoryMaster():
         #     with open(self.params['iop'].device, 'rb') as handle:
         #         self.dp = pickle.load(handle)
         dprint(self.params['iop'].fields)
-        self.cam = mkids.Camera(params)
+        self.cam = mkids.Camera(params, fields=self.fields)
 
         if not os.path.exists(self.params['iop'].median_noise):
             self.get_median_noise()
@@ -65,23 +65,25 @@ class ObservatoryMaster():
         # # fields = mkids.load_fields()
 
         dprint(self.params['iop'].fields, self.params['iop'].device)
-        comps = False
+        # comps = False
 
-        cam = mkids.Camera(self.params['iop'].__dict__)
-        stackcube = cam.stackcube
-        if os.path.exists(self.params['iop'].form_photons):
-            dprint(f"Formatted photon data already exists at {self.params['iop'].form_photons}")
-            with open(self.params['iop'].form_photons, 'rb') as handle:
-                stackcube, dp = pickle.load(handle)
-        else:
-            # stackcube, dp = self.get_form_photons(comps=comps)
-            stackcube, dp = get_form_photons(self.fields, self.dp, os.path.join(self.masterdir,'photons.pkl'),
-                                             self.params['mp'], comps=comps)
+        # cam = mkids.Camera(self.params['iop'], self.doublecube)
+        # stackcube = cam.stackcube
+        # if os.path.exists(self.params['iop'].photons):
+        #     dprint(f"Formatted photon data already exists at {self.params['iop'].form_photons}")
+        #     with open(self.params['iop'].form_photons, 'rb') as handle:
+        #         stackcube, dp = pickle.load(handle)
+        # else:
+        #     # stackcube, dp = self.get_form_photons(comps=comps)
+        #     stackcube, dp = get_form_photons(self.fields, self.dp, os.path.join(self.masterdir,'photons.pkl'),
+        #                                      self.params['mp'], comps=comps)
+        if not hasattr(self.cam, 'stackcube'):
+            self.cam = get_form_photons(self.fields, self.cam, comps=False)
 
-        stackcube /= np.sum(stackcube)  # /sp.numframes
-        stackcube = np.transpose(stackcube, (1, 0, 2, 3))
+        self.cam.stackcube /= np.sum(self.cam.stackcube)  # /sp.numframes
+        self.cam.stackcube = np.transpose(self.cam.stackcube, (1, 0, 2, 3))
 
-        frame_nofc = pca.pca(stackcube, angle_list=np.zeros((stackcube.shape[1])), scale_list=scale_list,
+        frame_nofc = pca.pca(self.cam.stackcube, angle_list=np.zeros((self.cam.stackcube.shape[1])), scale_list=scale_list,
                       mask_center_px=None, adimsdi='double', ncomp=7, ncomp2=None,
                       collapse='median')
 
@@ -90,38 +92,10 @@ class ObservatoryMaster():
         # with open(self.params['iop'].device, 'rb') as handle:
         #     dp = pickle.load(handle)
 
-        mask = self.dp.QE_map == 0
+        mask = self.cam.QE_map == 0
         median_noise, vector_radd = noise_per_annulus(frame_nofc, separation=fwhm, fwhm=fwhm, mask=mask)
         np.savetxt(self.params['iop'].median_noise, median_noise)
 
-    # def get_form_photons(self, comps=True):
-    #     dprint('Making new formatted photon data')
-    #
-    #     # dprint(self.params['iop'].fields, self.params['iop'].device)
-    #     # with open(self.params['iop'].device, 'rb') as handle:
-    #     #     dp = pickle.load(handle)
-    #
-    #     stackcube = np.zeros((len(self.fields), self.params['ap'].n_wvl_final, self.dp.array_size[1], self.dp.array_size[0]))
-    #     # dprint(self.fields.shape)
-    #     for step in range(len(self.fields)):
-    #         dprint(step)
-    #         if comps:
-    #             spectralcube = np.sum(self.fields[step], axis=1)
-    #         else:
-    #             spectralcube = self.fields[step, :, 0]
-    #
-    #         dprint((self.params['iop'].device, spectralcube.shape))
-    #         # view_spectra(spectralcube, logAmp=True)
-    #         step_packets = mkids.get_packets(spectralcube, step, self.dp, self.params['mp'])
-    #         cube = mkids.make_datacube_from_list(step_packets,
-    #                                              (self.params['ap'].n_wvl_final, self.dp.array_size[0],self.dp.array_size[1]))
-    #         stackcube[step] = cube
-    #
-    #     with open(self.params['iop'].form_photons, 'wb') as handle:
-    #         dprint((self.params['iop'].form_photons, stackcube.shape, self.dp))
-    #         pickle.dump((stackcube, self.dp), handle, protocol=pickle.HIGHEST_PROTOCOL)
-    #
-    #     return stackcube, self.dp
 
     def make_fields_master(self, plot=False):
         """ The master fields file of which all the photons are seeded from according to their device
@@ -137,49 +111,52 @@ class ObservatoryMaster():
 
         obs_seq = np.abs(observation['fields'][:, -1]) ** 2
 
-        double_cube = np.zeros((self.params['sp'].numframes, self.params['ap'].n_wvl_final, 2, self.params['sp'].grid_size,
+        fields_master = np.zeros((self.params['sp'].numframes, self.params['ap'].n_wvl_final, 2, self.params['sp'].grid_size,
                                 self.params['sp'].grid_size))
         collapse_comps = np.sum(obs_seq[:, :, 1:], axis=2)
-        double_cube[:, :, 0] = obs_seq[:, :, 0]
-        double_cube[:, :, 1] = collapse_comps
+        fields_master[:, :, 0] = obs_seq[:, :, 0]
+        fields_master[:, :, 1] = collapse_comps
         if plot:
-            view_spectra(double_cube[0,:,0], logZ=True, show=True, title='star cube timestep 0')
-            view_spectra(double_cube[0,:,1], logZ=True, show=True, title='planets cube timestep 0')
+            view_spectra(fields_master[0,:,0], logZ=True, show=True, title='star cube timestep 0')
+            view_spectra(fields_master[0,:,1], logZ=True, show=True, title='planets cube timestep 0')
 
-        dprint(f"Reduced shape of obs_seq = {np.shape(double_cube)} (numframes x nwsamp x 2 x grid x grid)")
+        dprint(f"Reduced shape of obs_seq = {np.shape(fields_master)} (numframes x nwsamp x 2 x grid x grid)")
 
         os.rename(self.params['iop'].fields, os.path.join(self.masterdir, 'fields_planet_slices.h5'))
-        telescope.save_fields(double_cube)
+        telescope.save_fields(fields_master)
 
+        return fields_master
 
-class Camera():
+class MetricTester():
     """ This instrument has the magical ability to quickly tune one device parameter during an observation """
-    def __init__(self, params, metric, master_input, debug=True):
-        self.params = params
+    def __init__(self, obs, metric, debug=True):
+        self.params = obs.params
+        self.master_cam = obs.cam
+        self.master_fields = obs.fields
+
         self.metric = metric
-        self.master_input = master_input
 
     def __call__(self, debug=True):
         # if debug:
         #     check_contrast_contriubtions(self.metric.vals, metric_name, self.master_input, comps=False)
 
-        self.params['iop'].perf_data = os.path.join(self.params['iop'].testdir, 'performance_data.pkl')
-        dprint(self.params['iop'].perf_data)
-        if not os.path.exists(self.params['iop'].perf_data):
+        self.params['iop'].performance_data = os.path.join(self.params['iop'].testdir, 'performance_data.pkl')
+        dprint(self.params['iop'].performance_data)
+        if not os.path.exists(self.params['iop'].performance_data):
             # import importlib
             # param = importlib.import_module(self.metric.name)
 
-            if not os.path.exists(f"{self.params['iop'].device[:-4]}_{self.metric.name}={self.metric.vals[0]}.pkl"):
-                self.metric.adapt_dp_master()
+            # if not os.path.exists(f"{self.params['iop'].device[:-4]}_{self.metric.name}={self.metric.vals[0]}.pkl"):
+            self.metric.create_adapted_cams()
 
             comps_ = [True, False]
             pca_products = []
             for comps in comps_:
                 if hasattr(self.metric, 'get_stackcubes'):
                 # if 'get_stackcubes' in dir(param):
-                    stackcubes, dps = self.metric.get_stackcubes(master_cache=self.master_input, comps=comps, plot=False)
+                    self.metric.get_stackcubes(self.master_fields, comps=comps, plot=False)
                 else:
-                    stackcubes, dps = self.get_stackcubes(comps=comps, plot=False)
+                    self.get_stackcubes(self.master_fields, comps=comps, plot=False)
 
                 if hasattr(self.metric, 'pca_stackcubes'):
                 # if 'pca_stackcubes' in dir(param):
@@ -193,15 +170,15 @@ class Camera():
             noises = pca_products[1][3]
             conts = pca_products[1][4]
 
-            with open(self.params['iop'].perf_data, 'wb') as handle:
+            with open(self.params['iop'].performance_data, 'wb') as handle:
                 pickle.dump((maps, rad_samps, thruputs, noises, conts, self.metric.vals), handle, protocol=pickle.HIGHEST_PROTOCOL)
         else:
-            with open(self.params['iop'].perf_data, 'rb') as handle:
-                perf_data = pickle.load(handle)
-                if len(perf_data) == 6:
-                    maps, rad_samps, thruputs, noises, conts, self.metric.vals = perf_data
+            with open(self.params['iop'].performance_data, 'rb') as handle:
+                performance_data = pickle.load(handle)
+                if len(performance_data) == 6:
+                    maps, rad_samps, thruputs, noises, conts, self.metric.vals = performance_data
                 else:
-                    maps, rad_samps, conts, self.metric.vals = perf_data
+                    maps, rad_samps, conts, self.metric.vals = performance_data
 
         if debug:
             try:
@@ -216,54 +193,23 @@ class Camera():
 
         return {'maps': maps, 'rad_samps':rad_samps, 'conts':conts}
 
-    def get_stackcubes(self, comps=True, plot=False):
-        _, master_fields = self.master_input
-        self.params['iop'].fields = master_fields
+    def get_stackcubes(self, master_fields, comps=True, plot=False):
 
-        dprint(self.params['iop'].device)
-        dprint(self.params['iop'].form_photons)
-        dprint(self.params['iop'].testdir)
-        dprint(master_fields)
+        for i, cam, metric_val in zip(range(len(self.metric.cams)), self.metric.cams, self.metric.vals):
 
-        self.params['iop'].device = self.params['iop'].device[:-4] + '_'+self.metric.name
-        self.params['iop'].form_photons = self.params['iop'].form_photons[:-4] +'_'+self.metric.name
-
-        dprint(self.params['iop'].device)
-        dprint(self.params['iop'].form_photons)
-        dprint(self.params['iop'].testdir)
-        dprint(master_fields)
-        # sim = mm.RunMedis('test', 'fields')
-        # observation = sim()
-        # fields = observation['fields']
-        # fields = mkids.load_fields()
-
-        stackcubes, dps =  [], []
-        for metric_val in self.metric.vals:
-            self.params['iop'].form_photons = self.params['iop'].form_photons.split('_'+self.metric.name)[0] + f'_{self.metric.name}={metric_val}_comps={comps}.pkl'
-            self.params['iop'].device = self.params['iop'].device.split('_'+self.metric.name)[0] + f'_{self.metric.name}={metric_val}.pkl'
-            dprint(self.params['iop'].device)
-            dprint(self.params['iop'].form_photons)
-            if os.path.exists(self.params['iop'].form_photons):
-                dprint(f"Formatted photon data already exists at {self.params['iop'].form_photons}")
-                with open(self.params['iop'].form_photons, 'rb') as handle:
-                    stackcube, dp = pickle.load(handle)
-
-            else:
-                stackcube, dp = get_form_photons(master_fields, comps=comps)
+            if not hasattr(cam, 'stackcube'):
+                cam = get_form_photons(master_fields, cam, comps=comps)
 
             if plot:
                 plt.figure()
-                plt.hist(stackcube[stackcube!=0].flatten(), bins=np.linspace(0,1e4, 50))
+                plt.hist(cam.stackcube[cam.stackcube!=0].flatten(), bins=np.linspace(0,1e4, 50))
                 plt.yscale('log')
-                view_spectra(stackcube[0], logAmp=True, show=False)
-                view_spectra(stackcube[:, 0], logAmp=True, show=True)
+                view_spectra(cam.stackcube[0], logAmp=True, show=False)
+                view_spectra(cam.stackcube[:, 0], logAmp=True, show=True)
 
-            stackcube /= np.sum(stackcube)  # /sp.numframes
-            stackcube = np.transpose(stackcube, (1, 0, 2, 3))
-            stackcubes.append(stackcube)
-            dps.append(dp)
-
-        return stackcubes, dps
+            cam.stackcube /= np.sum(cam.stackcube)  # /sp.numframes
+            cam.stackcube = np.transpose(cam.stackcube, (1, 0, 2, 3))
+            self.metric.cams[i] = cam
 
     def pca_stackcubes(self, stackcubes, dps, comps=True):
         wsamples = np.linspace(ap.wvl_range[0], ap.wvl_range[1], ap.n_wvl_final)
@@ -351,11 +297,11 @@ if __name__ == '__main__':
             # config_images(len(param.metric_multiplier))  # the line colors and map inds depend on the amount being plotted
             # plt.rcParams["axes.prop_cycle"] = plt.cycler("color", plt.cm.viridis(np.linspace(0, 1, len(param.metric_multiplier))))
 
-            metric_test = metric_module.MetricTest(obs.dp, os.path.join(params['iop'].datadir,
-                                                                        investigation, str(r), metric_name))
+            metric_config = metric_module.MetricConfigur(obs.cam,
+                                                   os.path.join(params['iop'].datadir, investigation, str(r), metric_name))
 
-            cam = Camera(obs.params, metric_test, master_input=(obs.dp, obs.fields))
-            metric_results = cam(debug=True)
+            metric_test = MetricTester(obs, metric_config)
+            metric_results = metric_test(debug=True)
             # param_data = form(param.metric_vals, param.metric_name,
             #                   master_cache=(obs.dp, obs.fields), debug=True)
 
@@ -364,11 +310,11 @@ if __name__ == '__main__':
 
             # store the mutlipliers but flip those that achieve better contrast when the metric is decreasing
             if metric_name in ['R_sig', 'g_sig', 'dark_bright']:  # 'dark_bright',
-                metric_multi_list.append(metric_test.metric_multiplier[::-1])
-                metric_vals_list.append(metric_test.metric_vals[::-1])
+                metric_multi_list.append(metric_config.metric_multiplier[::-1])
+                metric_vals_list.append(metric_config.metric_vals[::-1])
             else:
-                metric_multi_list.append(metric_test.metric_multiplier)
-                metric_vals_list.append(metric_test.metric_vals)
+                metric_multi_list.append(metric_config.metric_multiplier)
+                metric_vals_list.append(metric_config.metric_vals)
 
         cont_data = np.array(cont_data)
         dprint(cont_data.shape)
