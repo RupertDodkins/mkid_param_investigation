@@ -166,8 +166,7 @@ def set_field_params():
                       'OOPP': False}  # [16,8,4,16]}#False}#
     tp.aber_vals = {'a': [5e-18, 1e-19],  # 'a': [5e-17, 1e-18],
                     'b': [2.0, 0.2],
-                    'c': [3.1, 0.5],
-                    'a_amp': [0.05, 0.01]}
+                    'c': [3.1, 0.5]}
     tp.piston_error = False
     ap.wvl_range = np.array([800, 1500]) /1e9
     tp.rot_rate = 0  # deg/s

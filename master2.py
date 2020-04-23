@@ -15,7 +15,7 @@ params['sp'].grid_size = 512
 params['sp'].closed_loop = False
 
 params['ap'].companion = True
-params['ap'].star_flux = int(1e4)
+params['ap'].star_flux = int(1e10)
 # params['ap'].contrast = 10**np.array([-3.5, -4, -4.5, -5] * 2)
 # params['ap'].companion_xy = [[2.5,0], [0,3], [-3.5,0], [0,-4], [4.5,0], [0,5], [-5.5,0],[0,-6]]
 # params['ap'].n_wvl_init = 8
@@ -26,7 +26,7 @@ params['ap'].n_wvl_init = 2
 params['ap'].n_wvl_final = 2
 
 params['tp'].prescription = 'general_telescope'
-params['tp'].beam_ratio = 0.25
+params['sp'].beam_ratio = 0.3 #0.25
 # sp.save_locs = np.empty((0, 1))
 params['tp'].entrance_d = 8.
 params['tp'].obscure = True
@@ -46,13 +46,12 @@ params['tp'].aber_params = {'CPA': True,
                          'n_surfs': 4}
 params['tp'].aber_vals = {'a': [5e-18, 1e-19],
                        'b': [2.0, 0.2],
-                       'c': [3.1, 0.5],
-                       'a_amp': [0.05, 0.01]}
+                       'c': [3.1, 0.5]}
 params['tp'].piston_error = False
 params['ap'].wvl_range = np.array([800, 1500]) /1e9
 params['tp'].rot_rate = 0  # deg/s
 params['tp'].pix_shift = [[0, 0]]
-params['tp'].satelite_speck = True
+params['tp'].satelite_speck = False
 params['tp'].legs_frac = 0.03
 params['tp'].f_lens = 200.0 * params['tp'].entrance_d
 params['tp'].use_coronagraph = True
