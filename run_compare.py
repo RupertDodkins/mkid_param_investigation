@@ -12,7 +12,7 @@ import medis.MKIDs as mkids
 import medis.medis_main as mm
 from medis.telescope import Telescope
 from medis.utils import dprint
-from medis.plot_tools import quick2D, quicklook_wf, view_spectra
+from medis.plot_tools import quick2D, quicklook_wf, view_spectra, body_spectra
 
 from master2 import params, get_form_photons
 
@@ -193,6 +193,7 @@ class MetricTester():
             try:
                 self.contrcurve_plot(self.metric.vals, rad_samps, thruputs, noises, conts)
                 # view_spectra(maps, logZ=True, show=False)
+                body_spectra(maps)
             except UnboundLocalError:
                 dprint('thruputs and noises not saved in old versions :(')
                 # raise UnboundLocalError
