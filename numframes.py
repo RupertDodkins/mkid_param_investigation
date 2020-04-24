@@ -35,7 +35,7 @@ class MetricConfigur():
         self.vals = np.int_(np.round(median_val * metric_multiplier))
         self.master_cam = master_cam
         self.testdir = testdir
-        self.cams = []
+        self.cams = {'star': [], 'comp': []}
 
         if not os.path.exists(self.testdir):
             os.mkdir(self.testdir)
@@ -50,29 +50,30 @@ class MetricConfigur():
         # iop.device = iop.device.split('_' + self.name)[0] + f'_{self.name}={self.vals}.pkl'
         # with open(cam_filename, 'wb') as handle:
         #     pickle.dump(self.new_cam, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        for i, val in enumerate(self.vals):
-            # cam_filename = os.path.join(self.testdir, f'device_{self.name}={val}.pkl')
-            new_cam = copy.copy(self.master_cam)
-            new_cam.name = os.path.join(self.testdir, f'camera_{self.name}={val}.pkl')
-            self.cams.append(new_cam)
+        for obj in self.cams.keys():
+            for i, val in enumerate(self.vals):
+                # cam_filename = os.path.join(self.testdir, f'device_{self.name}={val}.pkl')
+                new_cam = copy.copy(self.master_cam)
+                new_cam.name = os.path.join(self.testdir, f'camera_{self.name}={val}_comp={obj}.pkl')
+                self.cams[obj].append(new_cam)
 
     def get_stackcubes(self, master_fields, comps=True, plot=False):
-
-        for i, cam, metric_val in zip(range(len(self.cams)), self.cams, self.vals):
+        obj = 'comp' if comps else 'star'
+        for i, cam, metric_val in zip(range(len(self.cams[obj])), self.cams[obj], self.vals):
             reduced_fields = master_fields[:metric_val]
             if not hasattr(cam, 'stackcube'):
                 cam = get_form_photons(reduced_fields, cam, comps=comps)
 
-            if plot:
-                plt.figure()
-                plt.hist(cam.stackcube[cam.stackcube!=0].flatten(), bins=np.linspace(0,1e4, 50))
-                plt.yscale('log')
-                view_spectra(cam.stackcube[0], logZ=True, show=False)
-                view_spectra(cam.stackcube[:, 0], logZ=True, show=False)
-
-            cam.stackcube /= np.sum(cam.stackcube)  # /sp.numframes
-            cam.stackcube = np.transpose(cam.stackcube, (1, 0, 2, 3))
-            self.cams[i] = cam
+            # if plot:
+            #     plt.figure()
+            #     plt.hist(cam.stackcube[cam.stackcube!=0].flatten(), bins=np.linspace(0,1e4, 50))
+            #     plt.yscale('log')
+            #     view_spectra(cam.stackcube[0], logZ=True, show=False)
+            #     view_spectra(cam.stackcube[:, 0], logZ=True, show=False)
+            #
+            # cam.stackcube /= np.sum(cam.stackcube)  # /sp.numframes
+            # cam.stackcube = np.transpose(cam.stackcube, (1, 0, 2, 3))
+            self.cams[obj][i] = cam
 
         # return self.cams
 

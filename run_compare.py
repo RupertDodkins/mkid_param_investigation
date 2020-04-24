@@ -3,6 +3,7 @@ import importlib
 import numpy as np
 import matplotlib.pyplot as plt
 import pickle
+import copy
 
 from vip_hci import phot, metrics, pca
 from vip_hci.metrics.contrcurve import noise_per_annulus
@@ -130,19 +131,27 @@ class ObservatoryMaster():
 class MetricTester():
     """ This instrument has the magical ability to quickly tune one device parameter during an observation """
     def __init__(self, obs, metric, debug=True):
+
         self.params = obs.params
+
+        self.wvl_range = obs.params['ap'].wvl_range
+        self.n_wvl_final = obs.params['ap'].n_wvl_final
+        self.lod = obs.params['mp'].lod
+        self.platescale = obs.params['tp'].platescale
         self.master_cam = obs.cam
         self.master_fields = obs.fields
 
         self.metric = metric
+        self.testdir = metric.testdir
+
+        self.performance_data = os.path.join(self.testdir, 'performance_data.pkl')
 
     def __call__(self, debug=True):
         # if debug:
         #     check_contrast_contriubtions(self.metric.vals, metric_name, self.master_input, comps=False)
 
-        self.params['iop'].performance_data = os.path.join(self.params['iop'].testdir, 'performance_data.pkl')
-        dprint(self.params['iop'].performance_data)
-        if not os.path.exists(self.params['iop'].performance_data):
+        dprint(self.performance_data)
+        if not os.path.exists(self.performance_data):
             # import importlib
             # param = importlib.import_module(self.metric.name)
 
@@ -153,16 +162,16 @@ class MetricTester():
             pca_products = []
             for comps in comps_:
                 if hasattr(self.metric, 'get_stackcubes'):
-                # if 'get_stackcubes' in dir(param):
+                    # if 'get_stackcubes' in dir(param):
                     self.metric.get_stackcubes(self.master_fields, comps=comps, plot=False)
                 else:
                     self.get_stackcubes(self.master_fields, comps=comps, plot=False)
 
                 if hasattr(self.metric, 'pca_stackcubes'):
-                # if 'pca_stackcubes' in dir(param):
+                    # if 'pca_stackcubes' in dir(param):
                     pca_products.append(self.metric.pca_stackcubes(stackcubes, dps, comps))
                 else:
-                    pca_products.append(self.pca_stackcubes(stackcubes, dps, comps))
+                    pca_products.append(self.pca_stackcubes(comps))
 
             maps = pca_products[0]
             rad_samps = pca_products[1][1]
@@ -170,10 +179,10 @@ class MetricTester():
             noises = pca_products[1][3]
             conts = pca_products[1][4]
 
-            with open(self.params['iop'].performance_data, 'wb') as handle:
+            with open(self.performance_data, 'wb') as handle:
                 pickle.dump((maps, rad_samps, thruputs, noises, conts, self.metric.vals), handle, protocol=pickle.HIGHEST_PROTOCOL)
         else:
-            with open(self.params['iop'].performance_data, 'rb') as handle:
+            with open(self.performance_data, 'rb') as handle:
                 performance_data = pickle.load(handle)
                 if len(performance_data) == 6:
                     maps, rad_samps, thruputs, noises, conts, self.metric.vals = performance_data
@@ -182,8 +191,8 @@ class MetricTester():
 
         if debug:
             try:
-                contrcurve_plot(self.metric.vals, rad_samps, thruputs, noises, conts)
-                view_spectra(maps, logAmp=True, vmin=-1e-7, vmax=1e-7, show=False)
+                self.contrcurve_plot(self.metric.vals, rad_samps, thruputs, noises, conts)
+                # view_spectra(maps, logZ=True, show=False)
             except UnboundLocalError:
                 dprint('thruputs and noises not saved in old versions :(')
                 # raise UnboundLocalError
@@ -194,32 +203,23 @@ class MetricTester():
         return {'maps': maps, 'rad_samps':rad_samps, 'conts':conts}
 
     def get_stackcubes(self, master_fields, comps=True, plot=False):
-
-        for i, cam, metric_val in zip(range(len(self.metric.cams)), self.metric.cams, self.metric.vals):
+        obj = 'comp' if comps else 'star'
+        for i, cam, metric_val in zip(range(len(self.metric.cams[obj])), self.metric.cams[obj], self.metric.vals):
 
             if not hasattr(cam, 'stackcube'):
                 cam = get_form_photons(master_fields, cam, comps=comps)
 
-            if plot:
-                plt.figure()
-                plt.hist(cam.stackcube[cam.stackcube!=0].flatten(), bins=np.linspace(0,1e4, 50))
-                plt.yscale('log')
-                view_spectra(cam.stackcube[0], logAmp=True, show=False)
-                view_spectra(cam.stackcube[:, 0], logAmp=True, show=True)
+            self.metric.cams[obj][i] = cam
 
-            cam.stackcube /= np.sum(cam.stackcube)  # /sp.numframes
-            cam.stackcube = np.transpose(cam.stackcube, (1, 0, 2, 3))
-            self.metric.cams[i] = cam
-
-    def pca_stackcubes(self, stackcubes, dps, comps=True):
-        wsamples = np.linspace(ap.wvl_range[0], ap.wvl_range[1], ap.n_wvl_final)
-        scale_list = wsamples / (ap.wvl_range[1] - ap.wvl_range[0])
+    def pca_stackcubes(self, comps=True):
+        wsamples = np.linspace(self.wvl_range[0], self.wvl_range[1], self.n_wvl_final)
+        scale_list = wsamples / (self.wvl_range[1] - self.wvl_range[0])
         maps = []
 
         if comps:
-            for stackcube in stackcubes:
-                dprint(stackcube.shape)
-                SDI = pca.pca(stackcube, angle_list=np.zeros((stackcube.shape[1])), scale_list=scale_list,
+            for cam in self.metric.cams['comp']:
+                dprint(cam.stackcube.shape)
+                SDI = pca.pca(cam.stackcube, angle_list=np.zeros((cam.stackcube.shape[1])), scale_list=scale_list,
                               mask_center_px=None, adimsdi='double', ncomp=7, ncomp2=None,
                               collapse='median')
                 maps.append(SDI)
@@ -227,34 +227,92 @@ class MetricTester():
 
         else:
             rad_samps, thruputs, noises, conts = [], [], [], []
-            for stackcube, dp in zip(stackcubes, dps):
-                psf_template = get_unoccult_psf(fields=f'/IntHyperUnOccult_arraysize={dp.array_size}.h5', plot=False, numframes=1)
+            # for stackcube, dp in zip(stackcubes, dps):
+            for cam in self.metric.cams['star']:
+                unoccultname = os.path.join(self.testdir, f'telescope_unoccult_arraysize={cam.array_size}.pkl')
+                psf_template = self.get_unoccult_psf(unoccultname)
                 # star_phot = phot.contrcurve.aperture_flux(np.sum(psf_template, axis=0), [sp.grid_size // 2],
                 #                                           [sp.grid_size // 2], mp.lod, 1)[0]*10**-3#1.5
                 star_phot = 1.1
                 dprint(star_phot)
-                # view_spectra(psf_template, logAmp=True)
+                # view_spectra(psf_template, logZ=True)
                 algo_dict = {'scale_list': scale_list}
                 # temp for those older format cache files
-                if hasattr(dp, 'lod'):
-                    fwhm = dp.lod
+                if hasattr(cam, 'lod'):
+                    fwhm = cam.lod
                     dprint(fwhm)
                 else:
-                    fwhm = mp.lod
+                    fwhm = self.lod
                     dprint(fwhm)
-                method_out = eval_method(stackcube, pca.pca, psf_template,
-                                         np.zeros((stackcube.shape[1])), algo_dict,
-                                         fwhm=fwhm, star_phot=star_phot, dp=dp)
+                method_out = self.eval_method(cam.stackcube, pca.pca, psf_template,
+                                         np.zeros((cam.stackcube.shape[1])), algo_dict,
+                                         fwhm=fwhm, star_phot=star_phot, dp=cam)
 
                 thruput, noise, cont, sigma_corr, dist = method_out[0]
                 thruputs.append(thruput)
                 noises.append(noise)
                 conts.append(cont)
-                rad_samp = dp.platescale * dist
+                rad_samp = self.platescale * dist
                 rad_samps.append(rad_samp)
                 maps.append(method_out[1])
             plt.show(block=True)
             return maps, rad_samps, thruputs, noises, conts
+
+    def eval_method(self, cube, algo, psf_template, angle_list, algo_dict, fwhm=6, star_phot=1, dp=None):
+        dprint(fwhm, star_phot)
+        fulloutput = metrics.contrcurve.contrast_curve(cube=cube, interp_order=2,
+                                                       angle_list=angle_list, psf_template=psf_template,
+                                                       fwhm=fwhm, pxscale=self.platescale / 1000,
+                                                       # wedge=(-45, 45), int(dp.lod[0])
+                                                       starphot=star_phot, algo=algo, nbranch=1,
+                                                       adimsdi='double', ncomp=7, ncomp2=None,
+                                                       debug=False, plot=False, theta=0, full_output=True, fc_snr=100,
+                                                       dp=dp, **algo_dict)
+        metrics_out = [fulloutput[0]['throughput'], fulloutput[0]['noise'], fulloutput[0]['sensitivity_student'],
+                       fulloutput[0]['sigma corr'], fulloutput[0]['distance']]
+        metrics_out = np.array(metrics_out)
+        return metrics_out, fulloutput[2]
+
+    def get_unoccult_psf(self, name):
+
+        params = copy.copy(self.params)
+        params['sp'].save_fields = True
+        params['ap'].companion = False
+        params['tp'].cg_type = None
+        params['sp'].numframes = 1
+        params['ap'].sample_time = 1e-3
+        params['sp'].save_list = ['detector']
+
+        params['iop'].update(self.metric.testdir)
+        params['iop'].telescope = name
+
+        telescope = Telescope(self.params)
+        observation = telescope()
+        fields = observation['fields']
+        psf_template = np.abs(fields[0, -1, :, 0, 1:, 1:]) ** 2
+        # view_spectra(psf_template, logZ=True)
+
+        return psf_template
+
+    def contrcurve_plot(self, metric_vals, rad_samps, thruputs, noises, conts):
+        fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(14, 3.4))
+
+        # plotdata[:, 2] = plotdata[:, 1]*plotdata[:, 3] / np.mean(plotdata[:, 0], axis=0)
+
+        for rad_samp, thruput in zip(rad_samps, thruputs):
+            axes[0].plot(rad_samp, thruput)
+        for rad_samp, noise in zip(rad_samps, noises):
+            axes[1].plot(rad_samp, noise)
+        for rad_samp, cont in zip(rad_samps, conts):
+            axes[2].plot(rad_samp, cont)
+        for ax in axes:
+            ax.set_yscale('log')
+            ax.set_xlabel('Radial Separation')
+            ax.tick_params(direction='in', which='both', right=True, top=True)
+        axes[0].set_ylabel('Throughput')
+        axes[1].set_ylabel('Noise')
+        axes[2].set_ylabel('5$\sigma$ Contrast')
+        axes[2].legend([str(metric_val) for metric_val in metric_vals])
 
 def find_nearest(array, value):
     array = np.asarray(array)
@@ -297,8 +355,8 @@ if __name__ == '__main__':
             # config_images(len(param.metric_multiplier))  # the line colors and map inds depend on the amount being plotted
             # plt.rcParams["axes.prop_cycle"] = plt.cycler("color", plt.cm.viridis(np.linspace(0, 1, len(param.metric_multiplier))))
 
-            metric_config = metric_module.MetricConfigur(obs.cam,
-                                                   os.path.join(params['iop'].datadir, investigation, str(r), metric_name))
+            testdir = os.path.join(params['iop'].datadir, investigation, str(r), metric_name)
+            metric_config = metric_module.MetricConfigur(obs.cam, testdir)
 
             metric_test = MetricTester(obs, metric_config)
             metric_results = metric_test(debug=True)

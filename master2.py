@@ -15,7 +15,7 @@ params['sp'].grid_size = 512
 params['sp'].closed_loop = False
 
 params['ap'].companion = True
-params['ap'].star_flux = int(1e10)
+params['ap'].star_flux = int(1e8)
 # params['ap'].contrast = 10**np.array([-3.5, -4, -4.5, -5] * 2)
 # params['ap'].companion_xy = [[2.5,0], [0,3], [-3.5,0], [0,-4], [4.5,0], [0,5], [-5.5,0],[0,-6]]
 # params['ap'].n_wvl_init = 8
@@ -87,7 +87,7 @@ params['mp'].remove_close = False
 params['mp'].quantize_FCs = True
 params['mp'].wavecal_coeffs = [1.e9 / 6, -250]
 
-def get_form_photons(fields, cam, comps=True):
+def get_form_photons(fields, cam, comps=True, plot=False):
     """
     Alternative to cam.__call__ that allows the user to specify whether the spectracube contains the planets
 
@@ -113,6 +113,16 @@ def get_form_photons(fields, cam, comps=True):
         step_packets = cam.get_packets(spectralcube, step)
         cube = cam.make_datacube_from_list(step_packets)
         cam.stackcube[step] = cube
+
+    if plot:
+        plt.figure()
+        plt.hist(cam.stackcube[cam.stackcube != 0].flatten(), bins=np.linspace(0, 1e4, 50))
+        plt.yscale('log')
+        view_spectra(cam.stackcube[0], logZ=True, show=False)
+        view_spectra(cam.stackcube[:, 0], logZ=True, show=True)
+
+    cam.stackcube /= np.sum(cam.stackcube)  # /sp.numframes
+    cam.stackcube = np.transpose(cam.stackcube, (1, 0, 2, 3))
 
     cam.save()
 
