@@ -1,6 +1,8 @@
 import numpy as np
 import pickle
+from matplotlib import pyplot as plt
 
+from medis.plot_tools import quick2D, body_spectra
 from medis.params import params
 import medis.MKIDs as mkids
 
@@ -13,21 +15,21 @@ params['sp'].save_ints = True
 params['sp'].cont_save = True
 params['sp'].grid_size = 512
 params['sp'].closed_loop = False
+params['sp'].save_to_disk = True
 
 params['ap'].companion = True
-params['ap'].star_flux = int(1e8)
+params['ap'].star_flux = int(1e9)
 # params['ap'].contrast = 10**np.array([-3.5, -4, -4.5, -5] * 2)
 # params['ap'].companion_xy = [[2.5,0], [0,3], [-3.5,0], [0,-4], [4.5,0], [0,5], [-5.5,0],[0,-6]]
-# params['ap'].n_wvl_init = 8
-# params['ap'].n_wvl_final = 16
+params['ap'].n_wvl_init = 8
+params['ap'].n_wvl_final = 16
 params['ap'].contrast = [10**-3.5]
 params['ap'].companion_xy = [[2.5,0]]
-params['ap'].n_wvl_init = 2
-params['ap'].n_wvl_final = 2
+# params['ap'].n_wvl_init = 3
+# params['ap'].n_wvl_final = 3
 
 params['tp'].prescription = 'general_telescope'
 params['sp'].beam_ratio = 0.3 #0.25
-# sp.save_locs = np.empty((0, 1))
 params['tp'].entrance_d = 8.
 params['tp'].obscure = True
 params['tp'].use_ao = True
@@ -39,11 +41,7 @@ params['tp'].use_atmos = True
 params['tp'].use_zern_ab = False
 params['tp'].occulter_type = 'Vortex'
 params['tp'].aber_params = {'CPA': True,
-                         'NCPA': True,
-                         'QuasiStatic': False,  # or Static
-                         'Phase': True,
-                         'Amp': False,
-                         'n_surfs': 4}
+                         'NCPA': True}
 params['tp'].aber_vals = {'a': [5e-18, 1e-19],
                        'b': [2.0, 0.2],
                        'c': [3.1, 0.5]}
@@ -80,11 +78,11 @@ params['mp'].g_mean = 0.3
 params['mp'].g_sig = 0.04
 params['mp'].bg_mean = -10
 params['mp'].bg_sig = 40
-params['mp'].pix_yield = 0.9
+params['mp'].pix_yield = 1# 0.9
 params['mp'].array_size = np.array([150, 150])
 params['mp'].lod = 6
 params['mp'].remove_close = False
-params['mp'].quantize_FCs = True
+params['mp'].quantize_FCs = False #True
 params['mp'].wavecal_coeffs = [1.e9 / 6, -250]
 
 def get_form_photons(fields, cam, comps=True, plot=False):
@@ -114,16 +112,16 @@ def get_form_photons(fields, cam, comps=True, plot=False):
         cube = cam.make_datacube_from_list(step_packets)
         cam.stackcube[step] = cube
 
+    cam.stackcube /= np.sum(cam.stackcube)  # /sp.numframes
+    cam.stackcube = np.transpose(cam.stackcube, (1, 0, 2, 3))
+
     if plot:
         plt.figure()
         plt.hist(cam.stackcube[cam.stackcube != 0].flatten(), bins=np.linspace(0, 1e4, 50))
         plt.yscale('log')
-        view_spectra(cam.stackcube[0], logZ=True, show=False)
-        view_spectra(cam.stackcube[:, 0], logZ=True, show=True)
+        body_spectra(cam.stackcube, show=True, title='stackcube')
 
-    cam.stackcube /= np.sum(cam.stackcube)  # /sp.numframes
-    cam.stackcube = np.transpose(cam.stackcube, (1, 0, 2, 3))
-
-    cam.save()
+    if cam.usesave:
+        cam.save()
 
     return cam
