@@ -14,6 +14,7 @@ from medis.utils import dprint
 from medis.plot_tools import quick2D, view_spectra, body_spectra
 
 from master2 import params
+from metrics import MetricConfig
 from diagrams import contrcurve_plot, combo_performance
 from substitution import get_form_photons
 
@@ -113,23 +114,17 @@ class MetricTester():
 
         dprint(self.performance_data)
         if not os.path.exists(self.performance_data):
-            # import importlib
-            # param = importlib.import_module(self.metric.name)
-
-            # if not os.path.exists(f"{self.params['iop'].device[:-4]}_{self.metric.name}={self.metric.vals[0]}.pkl"):
             self.metric.create_adapted_cams()
 
             comps_ = [True, False]
             pca_products = []
             for comps in comps_:
                 if hasattr(self.metric, 'get_stackcubes'):
-                    # if 'get_stackcubes' in dir(param):
-                    self.metric.get_stackcubes(self.master_fields, comps=comps, plot=False)
+                    self.metric.get_stackcubes(self.master_fields, comps=comps)
                 else:
-                    self.get_stackcubes(self.master_fields, comps=comps, plot=False)
+                    self.get_stackcubes(self.master_fields, comps=comps)
 
                 if hasattr(self.metric, 'pca_stackcubes'):
-                    # if 'pca_stackcubes' in dir(param):
                     pca_products.append(self.metric.pca_stackcubes(stackcubes, dps, comps))
                 else:
                     pca_products.append(self.pca_stackcubes(comps))
@@ -163,7 +158,7 @@ class MetricTester():
 
         return {'maps': maps, 'rad_samps':rad_samps, 'conts':conts}
 
-    def get_stackcubes(self, master_fields, comps=True, plot=False):
+    def get_stackcubes(self, master_fields, comps=True):
         obj = 'comp' if comps else 'star'
         for i, cam, metric_val in zip(range(len(self.metric.cams[obj])), self.metric.cams[obj], self.metric.vals):
 
@@ -297,15 +292,16 @@ if __name__ == '__main__':
 
         comp_images, cont_data, metric_multi_list, metric_vals_list = [], [], [], []
         for metric_name in metric_names:
-            metric_module = importlib.import_module(metric_name)
-            if metric_name in sys.modules:  # if the module has been loaded before it would be skipped and the params not initialized
-                dprint(metric_name)
-                metric_module = importlib.reload(metric_module)
-            # config_images(len(param.metric_multiplier))  # the line colors and map inds depend on the amount being plotted
+            # metric_module = importlib.import_module(metric_name)
+            # if metric_name in sys.modules:  # if the module has been loaded before it would be skipped and the params not initialized
+            #     dprint(metric_name)
+            #     metric_module = importlib.reload(metric_module)
+
             # plt.rcParams["axes.prop_cycle"] = plt.cycler("color", plt.cm.viridis(np.linspace(0, 1, len(param.metric_multiplier))))
 
             testdir = os.path.join(params['iop'].datadir, investigation, str(r), metric_name)
-            metric_config = metric_module.MetricConfig(obs.cam, testdir)
+            # metric_config = metric_module.MetricConfig(obs.cam, testdir)
+            metric_config = MetricConfig(metric_name, obs.cam, testdir)
 
             metric_test = MetricTester(obs, metric_config)
             metric_results = metric_test()
