@@ -1,10 +1,5 @@
 import numpy as np
-import pickle
-from matplotlib import pyplot as plt
-
-from medis.plot_tools import quick2D, body_spectra
 from medis.params import params
-import medis.MKIDs as mkids
 
 params['sp'].show_wframe = False
 params['sp'].save_obs = False
@@ -85,43 +80,7 @@ params['mp'].remove_close = False
 params['mp'].quantize_FCs = False #True
 params['mp'].wavecal_coeffs = [1.e9 / 6, -250]
 
-def get_form_photons(fields, cam, comps=True, plot=False):
-    """
-    Alternative to cam.__call__ that allows the user to specify whether the spectracube contains the planets
+params['sp'].numframes = 10
+# params['ap'].n_wvl_init = 3
+# params['ap'].n_wvl_final = 3
 
-    :param fields: ndarray
-    :param cam: mkids.Camera()
-    :param comps: bool
-
-    :return:
-    mkids.Camera()
-    """
-    ntime, nwave = fields.shape[0], fields.shape[1]
-
-    cam.stackcube = np.zeros((ntime, nwave, cam.array_size[1], cam.array_size[0]))
-    for step in range(len(fields)):
-        print(step)
-        if comps:
-            spectralcube = np.sum(fields[step], axis=1)
-        else:
-            spectralcube = fields[step, :, 0]
-
-        # step_packets = mkids.get_packets(spectralcube, step, dp, mp)
-        # cube = mkids.make_datacube_from_list(step_packets, (nwave,dp.array_size[0],dp.array_size[1]))
-        step_packets = cam.get_packets(spectralcube, step)
-        cube = cam.make_datacube_from_list(step_packets)
-        cam.stackcube[step] = cube
-
-    cam.stackcube /= np.sum(cam.stackcube)  # /sp.numframes
-    cam.stackcube = np.transpose(cam.stackcube, (1, 0, 2, 3))
-
-    if plot:
-        plt.figure()
-        plt.hist(cam.stackcube[cam.stackcube != 0].flatten(), bins=np.linspace(0, 1e4, 50))
-        plt.yscale('log')
-        body_spectra(cam.stackcube, show=True, title='stackcube')
-
-    if cam.usesave:
-        cam.save()
-
-    return cam

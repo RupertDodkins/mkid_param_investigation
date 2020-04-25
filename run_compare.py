@@ -2,30 +2,22 @@ import os, sys
 import importlib
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm, SymLogNorm
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-from matplotlib.ticker import ScalarFormatter
-import matplotlib.ticker as ticker
 import pickle
 import copy
 
 from vip_hci import phot, metrics, pca
 from vip_hci.metrics.contrcurve import noise_per_annulus
 
-import medis.MKIDs as mkids
-import medis.medis_main as mm
 from medis.telescope import Telescope
+from medis.MKIDs import Camera
 from medis.utils import dprint
 from medis.plot_tools import quick2D, view_spectra, body_spectra
 
-from master2 import params, get_form_photons
-
-params['sp'].numframes = 10
-# params['ap'].n_wvl_init = 3
-# params['ap'].n_wvl_final = 3
+from master2 import params
+from diagrams import contrcurve_plot, combo_performance
+from substitution import get_form_photons
 
 investigation = 'figure3_moretimesandwaves'
-
 
 class ObservatoryMaster():
     """ Each repeat has new fields and a median device params to seed from, as well as noise data for scaling """
@@ -43,7 +35,7 @@ class ObservatoryMaster():
         self.fields = self.make_fields_master()
 
         dprint(self.params['iop'].fields)
-        self.cam = mkids.Camera(params, fields=self.fields)
+        self.cam = Camera(params, fields=self.fields)
 
         if not os.path.exists(self.params['iop'].median_noise):
             self.get_median_noise()
@@ -99,7 +91,7 @@ class ObservatoryMaster():
 
 class MetricTester():
     """ This instrument has the magical ability to quickly tune one device parameter during an observation """
-    def __init__(self, obs, metric, debug=True):
+    def __init__(self, obs, metric):
 
         self.params = obs.params
 
@@ -160,7 +152,7 @@ class MetricTester():
 
         if debug:
             try:
-                self.contrcurve_plot(self.metric.vals, rad_samps, thruputs, noises, conts)
+                contrcurve_plot(self.metric.vals, rad_samps, thruputs, noises, conts)
                 body_spectra(maps, logZ=False, )
             except UnboundLocalError:
                 dprint('thruputs and noises not saved in old versions :(')
@@ -263,155 +255,10 @@ class MetricTester():
 
         return psf_template
 
-    def contrcurve_plot(self, metric_vals, rad_samps, thruputs, noises, conts):
-        fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(14, 3.4))
-
-        # plotdata[:, 2] = plotdata[:, 1]*plotdata[:, 3] / np.mean(plotdata[:, 0], axis=0)
-
-        for rad_samp, thruput in zip(rad_samps, thruputs):
-            axes[0].plot(rad_samp, thruput)
-        for rad_samp, noise in zip(rad_samps, noises):
-            axes[1].plot(rad_samp, noise)
-        for rad_samp, cont in zip(rad_samps, conts):
-            axes[2].plot(rad_samp, cont)
-        for ax in axes:
-            ax.set_yscale('log')
-            ax.set_xlabel('Radial Separation')
-            ax.tick_params(direction='in', which='both', right=True, top=True)
-        axes[0].set_ylabel('Throughput')
-        axes[1].set_ylabel('Noise')
-        axes[2].set_ylabel('5$\sigma$ Contrast')
-        axes[2].legend([str(metric_val) for metric_val in metric_vals])
-
 def fmt(x, pos):
     a, b = '{:.0e}'.format(x).split('e')
     b = int(b)
     return r'${} e^{{{}}}$'.format(a, b)
-
-def combo_performance(maps, rad_samps, conts, metric_vals, param_name, plot_inds=[0, 3, 6], err=None,
-                      metric_multi=None, three_lod_conts=None,  three_lod_errs=None, six_lod_conts=None,
-                      six_lod_errs=None, savedir=''):
-
-        # plt.rcParams["axes.prop_cycle"] = plt.cycler("color", plt.cm.viridis(np.linspace(0, 1, len(conts))))
-        letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i']
-        labels = ['i', 'ii', 'iii', 'iv', 'v']
-        title = r'  $I / I^{*}$'
-        vmin = -1e-8
-        vmax = 1e-6
-
-        fig, axes = plt.subplots(nrows=1, ncols=4, figsize=(14, 3.4))
-        param_name = param_name.replace('_', ' ')
-        if param_name == 'R mean': param_name = r'$R_\mu$'
-        if param_name == 'R sig': param_name = r'$R_\sigma$'
-        if param_name == 'g mean': param_name = r'QE$_\mu$'
-        if param_name == 'g sig': param_name = r'QE$_\sigma$'
-        fig.suptitle(param_name, x=0.515)
-
-        dprint(metric_vals, plot_inds)
-        for m, ax in enumerate(axes[:2]):
-            im = ax.imshow(maps[plot_inds[m]], interpolation='none', origin='lower', vmin=vmin, vmax=vmax,
-                           norm=SymLogNorm(linthresh=1e-8), cmap="inferno")
-            ax.text(0.05, 0.05, r'$P=$' + str(metric_vals[plot_inds[m]]), transform=ax.transAxes, fontweight='bold',
-                    color='w', fontsize=16)
-            # anno =
-            ax.text(0.04, 0.9, labels[m], transform=ax.transAxes, fontweight='bold', color='w', fontsize=22,
-                    family='serif')
-            ax.axis('off')
-
-        axes[0].text(0.84, 0.9, '0.2"', transform=axes[0].transAxes, fontweight='bold', color='w', ha='center',
-                     fontsize=14,
-                     family='serif')
-        # axes[1].plot([114, 134], [130, 130], color='w', linestyle='-', linewidth=3)
-        axes[0].plot([0.76, 0.89], [0.87, 0.87], transform=axes[0].transAxes, color='w', linestyle='-', linewidth=3)
-
-        divider = make_axes_locatable(axes[0])
-        cax = divider.append_axes("left", size="5%", pad=0.05)
-        # cax.yaxis.set_ticks_position('left')
-        # cax.yaxis.set_label_position('left')
-
-        cb = fig.colorbar(im, cax=cax, orientation='vertical', norm=LogNorm(), format=ticker.FuncFormatter(fmt))
-        cax.yaxis.set_ticks_position("left")
-        cb.ax.set_title(title, fontsize=16)  #
-        # cbar_ticks = np.logspace(np.log10(vmin), np.log10(vmax), num=5, endpoint=True)
-        cbar_ticks = [-1e-8, 0, 1e-8, 1e-7, 1e-6]
-        cb.set_ticks(cbar_ticks)
-
-        for f, (rad_samp, cont) in enumerate(zip(rad_samps, conts)):
-            if err is not None:
-                axes[2].errorbar(rad_samp, cont, yerr=err[f], label='%5.2f' % metric_vals[f])
-            else:
-                axes[2].plot(rad_samp, cont, label='%5.2f' % metric_vals[f])
-
-        axes[2].set_yscale('log')
-        axes[2].set_xlabel('Radial Separation')
-        axes[2].tick_params(direction='in', which='both', right=True, top=True)
-        axes[2].set_ylabel('5$\sigma$ Contrast')
-        planet_seps = np.arange(2.5, 6.5, 0.5) * 0.1
-        # contrast = np.array([[e,e] for e in np.arange(-3.5,-5.5,-0.5)]).flatten()
-        contrast = np.array([-3.5, -4, -4.5, -5] * 2)
-        axes[2].scatter(planet_seps, 10 ** contrast, marker='o', color='k', label='Planets')
-        axes[2].legend(ncol=2, fontsize=8, loc='upper right')
-        axes[2].text(0.04, 0.9, labels[2], transform=axes[2].transAxes, fontweight='bold', color='k', fontsize=22,
-                     family='serif')
-
-        colors = plt.cycler("color", plt.cm.gnuplot2(np.linspace(0, 1, 3))).by_key()["color"]
-        if np.any([metric_multi, three_lod_conts, three_lod_errs, six_lod_conts, six_lod_errs]):
-            from scipy.optimize import curve_fit
-
-            def func(x, a, b, c):
-                return a * np.exp(-b * x) + c
-
-            fit = True
-            try:
-                if np.any(three_lod_errs == 0) or np.any(six_lod_errs == 0):
-                    popt3, pcov3 = curve_fit(func, metric_multi, three_lod_conts)
-                    popt6, pcov6 = curve_fit(func, metric_multi, six_lod_conts)
-                else:
-                    popt3, pcov3 = curve_fit(func, metric_multi, three_lod_conts, sigma=three_lod_errs)
-                    popt6, pcov6 = curve_fit(func, metric_multi, six_lod_conts, sigma=six_lod_errs)
-            except RuntimeError as e:
-                print(e)
-                print('Could not find fit')
-                fit = False
-
-            # axes[2].get_shared_y_axes().join(axes[2], axes[3])
-            axes[3].set_yscale('log')
-            axes[3].set_xscale('log')
-            axes[3].set_xlabel(r'$P/P_\mathrm{med}$')
-
-            axes[3].tick_params(direction='in', which='both', right=True, top=True)
-
-            if fit:
-                axes[3].plot(metric_multi, func(metric_multi, *popt3),
-                             label=r'$3\lambda/D$: a=%5.3f, b=%5.3f, c=%5.3f' % tuple(popt3), c=colors[0])
-                axes[3].plot(metric_multi, func(metric_multi, *popt6),
-                             label=r'$6\lambda/D$: a=%5.3f, b=%5.3f, c=%5.3f' % tuple(popt6), c=colors[1])
-            axes[3].errorbar(metric_multi, three_lod_conts, yerr=three_lod_errs, linewidth=0, linestyle=None,
-                             marker='o', c=colors[0])
-            axes[3].errorbar(metric_multi, six_lod_conts, yerr=six_lod_errs, linewidth=0, linestyle=None, marker='o',
-                             c=colors[1])
-            axes[3].legend(fontsize=8)
-            axes[3].text(0.04, 0.9, labels[3], transform=axes[3].transAxes, fontweight='bold', color='k', fontsize=22,
-                         family='serif')
-
-            ax3_top = axes[3].twiny()
-            ax3_top.set_xscale('log')
-            ax3_top.tick_params(direction='in', which='both', right=True, top=True)
-            ax3_top.set_xlabel(r'$P$')
-            if fit: ax3_top.plot(metric_vals, func(metric_multi, *popt3), linewidth=0)
-
-            # for ax in [axes[3], ax3_top]:
-            #     for axis in [ax.xaxis, ax.yaxis]:
-            #         axis.set_major_formatter(ScalarFormatter())
-            for ax in [axes[3], ax3_top]:
-                ax.xaxis.set_major_formatter(ticker.FuncFormatter(
-                    lambda y, pos: ('{{:.{:1d}f}}'.format(int(np.maximum(-np.log10(y), 0)))).format(y)))
-
-        # plt.tight_layout()
-        plt.subplots_adjust(left=0.045, bottom=0.145, right=0.985, top=0.87, wspace=0.31)
-        print(os.path.join(savedir, param_name + '.pdf'))
-        fig.savefig(os.path.join(savedir, param_name + '.pdf'))
-        plt.show(block=True)
 
 def find_nearest(array, value):
     array = np.asarray(array)
@@ -434,10 +281,13 @@ def parse_cont_data(all_cont_data, p):
 
 if __name__ == '__main__':
 
+    # define the configuration
     repeats = 1  # number of medis runs to average over for the cont plots
-    metric_names = ['numframes', 'array_size', 'array_size_(rebin)', 'pix_yield', 'dark_bright', 'R_mean', 'R_sig',
-                   'g_mean', 'g_sig']  # 'g_mean_sig']# 'star_flux', 'exp_time'
+    # metric_names = ['numframes', 'array_size', 'array_size_(rebin)', 'pix_yield', 'dark_bright', 'R_mean', 'R_sig',
+    #                'g_mean', 'g_sig']  # 'g_mean_sig']# 'star_flux', 'exp_time'
+    metric_names = ['metrics/numframes']
 
+    # collect the data
     all_cont_data = []
     for r in range(repeats):
 
@@ -458,13 +308,10 @@ if __name__ == '__main__':
             metric_config = metric_module.MetricConfig(obs.cam, testdir)
 
             metric_test = MetricTester(obs, metric_config)
-            metric_results = metric_test(debug=True)
-            # param_data = form(param.metric_vals, param.metric_name,
-            #                   master_cache=(obs.dp, obs.fields), debug=True)
-
+            metric_results = metric_test()
+            
             comp_images.append(metric_results['maps'])
             cont_data.append([metric_results['rad_samps'],metric_results['conts']])
-
             # store the mutlipliers but flip those that achieve better contrast when the metric is decreasing
             if metric_name in ['R_sig', 'g_sig', 'dark_bright']:  # 'dark_bright',
                 metric_multi_list.append(metric_config.multiplier[::-1])
@@ -478,6 +325,7 @@ if __name__ == '__main__':
         all_cont_data.append(cont_data)
     all_cont_data = np.array(all_cont_data)  # (repeats x num_params x rad+cont x num_multi (changes)
 
+    # plot the data
     three_lod_sep = 0.3
     six_lod_sep = 2 * three_lod_sep
     fhqm = 0.03
