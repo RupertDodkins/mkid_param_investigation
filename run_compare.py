@@ -17,7 +17,7 @@ from master2 import params
 from diagrams import contrcurve_plot, combo_performance
 from substitution import get_form_photons
 
-investigation = 'figure3_moretimesandwaves'
+investigation = 'figure3'
 
 class ObservatoryMaster():
     """ Each repeat has new fields and a median device params to seed from, as well as noise data for scaling """
@@ -44,8 +44,8 @@ class ObservatoryMaster():
         wsamples = np.linspace(self.params['ap'].wvl_range[0], self.params['ap'].wvl_range[1], self.params['ap'].n_wvl_final)
         scale_list = wsamples / (self.params['ap'].wvl_range[1] - self.params['ap'].wvl_range[0])
 
-        if not hasattr(self.cam, 'stackcube'):
-            self.cam = get_form_photons(self.fields, self.cam, comps=False)
+        # if not hasattr(self.cam, 'stackcube'):
+        self.cam = get_form_photons(self.fields, self.cam, comps=False)
 
         frame_nofc = pca.pca(self.cam.stackcube, angle_list=np.zeros((self.cam.stackcube.shape[1])),
                              scale_list=scale_list, mask_center_px=None, adimsdi='double', ncomp=7, ncomp2=None,
@@ -285,7 +285,7 @@ if __name__ == '__main__':
     repeats = 1  # number of medis runs to average over for the cont plots
     # metric_names = ['numframes', 'array_size', 'array_size_(rebin)', 'pix_yield', 'dark_bright', 'R_mean', 'R_sig',
     #                'g_mean', 'g_sig']  # 'g_mean_sig']# 'star_flux', 'exp_time'
-    metric_names = ['metrics/numframes']
+    metric_names = ['numframes']
 
     # collect the data
     all_cont_data = []

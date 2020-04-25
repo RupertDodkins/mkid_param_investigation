@@ -1,19 +1,15 @@
 '''Example Code for conducting SDI with MKIDs'''
 
 import os
-import matplotlib as mpl
 import numpy as np
-mpl.use("Qt5Agg")
-import matplotlib.pylab as plt
 import copy as copy
 import pickle as pickle
 
 import medis.medis_main as mm
-# from medis.params import ap, iop
 from medis.plot_tools import quick2D, view_spectra
 from medis.utils import dprint
 
-from master2 import get_form_photons
+from substitution import get_form_photons
 
 # metric_name = __file__.split('/')[-1].split('.')[0]
 #
@@ -54,6 +50,7 @@ class MetricConfig():
             for i, val in enumerate(self.vals):
                 # cam_filename = os.path.join(self.testdir, f'device_{self.name}={val}.pkl')
                 new_cam = copy.copy(self.master_cam)
+                new_cam.stackcube = None
                 new_cam.name = os.path.join(self.testdir, f'camera_{self.name}={val}_comp={obj}.pkl')
                 self.cams[obj].append(new_cam)
 
@@ -61,8 +58,8 @@ class MetricConfig():
         obj = 'comp' if comps else 'star'
         for i, cam, metric_val in zip(range(len(self.cams[obj])), self.cams[obj], self.vals):
             reduced_fields = master_fields[:metric_val]
-            if not hasattr(cam, 'stackcube'):
-                cam = get_form_photons(reduced_fields, cam, comps=comps)
+            # if not hasattr(cam, 'stackcube'):
+            cam = get_form_photons(reduced_fields, cam, comps=comps)
 
             # if plot:
             #     plt.figure()
