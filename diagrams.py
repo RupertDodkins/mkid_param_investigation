@@ -7,7 +7,7 @@ import matplotlib.ticker as ticker
 
 from medis.utils import dprint
 
-def contrcurve_plot(self, metric_vals, rad_samps, thruputs, noises, conts):
+def contrcurve_plot(metric_vals, rad_samps, thruputs, noises, conts):
     fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(14, 3.4))
 
     # plotdata[:, 2] = plotdata[:, 1]*plotdata[:, 3] / np.mean(plotdata[:, 0], axis=0)
