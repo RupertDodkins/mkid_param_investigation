@@ -35,8 +35,7 @@ params['tp'].detector = 'ideal'
 params['tp'].use_atmos = True
 params['tp'].use_zern_ab = False
 params['tp'].occulter_type = 'Vortex'
-params['tp'].aber_params = {'phase': True,
-                         'amp': True}
+params['tp'].aber_params = {'Phase': True, 'Amp': False}
 params['tp'].aber_vals = {'a': [5e-18, 1e-19],
                        'b': [2.0, 0.2],
                        'c': [3.1, 0.5]}
