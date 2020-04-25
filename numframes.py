@@ -26,13 +26,13 @@ from master2 import get_form_photons
 #
 # # iop.set_testdir(f'{os.path.dirname(iop.testdir[:-1])}/{metric_name}/')
 
-class MetricConfigur():
+class MetricConfig():
     def __init__(self, master_cam, testdir):
         self.name = __file__.split('/')[-1].split('.')[0]
 
         median_val = 10
-        metric_multiplier = np.logspace(np.log10(0.2), np.log10(5), 7)
-        self.vals = np.int_(np.round(median_val * metric_multiplier))
+        self.multiplier = np.logspace(np.log10(0.2), np.log10(5), 7)
+        self.vals = np.int_(np.round(median_val * self.multiplier))
         self.master_cam = master_cam
         self.testdir = testdir
         self.cams = {'star': [], 'comp': []}
