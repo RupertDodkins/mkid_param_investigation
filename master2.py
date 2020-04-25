@@ -14,14 +14,14 @@ params['sp'].save_to_disk = True
 
 params['ap'].companion = True
 params['ap'].star_flux = int(1e9)
-# params['ap'].contrast = 10**np.array([-3.5, -4, -4.5, -5] * 2)
-# params['ap'].companion_xy = [[2.5,0], [0,3], [-3.5,0], [0,-4], [4.5,0], [0,5], [-5.5,0],[0,-6]]
-params['ap'].n_wvl_init = 8
-params['ap'].n_wvl_final = 16
-params['ap'].contrast = [10**-3.5]
-params['ap'].companion_xy = [[2.5,0]]
-# params['ap'].n_wvl_init = 3
-# params['ap'].n_wvl_final = 3
+# # params['ap'].contrast = 10**np.array([-3.5, -4, -4.5, -5] * 2)
+# # params['ap'].companion_xy = [[2.5,0], [0,3], [-3.5,0], [0,-4], [4.5,0], [0,5], [-5.5,0],[0,-6]]
+# params['ap'].n_wvl_init = 8
+# params['ap'].n_wvl_final = 16
+# params['ap'].contrast = [10**-3.5]
+# params['ap'].companion_xy = [[2.5,0]]
+# # params['ap'].n_wvl_init = 3
+# # params['ap'].n_wvl_final = 3
 
 params['tp'].prescription = 'general_telescope'
 params['sp'].beam_ratio = 0.3 #0.25
@@ -80,7 +80,16 @@ params['mp'].remove_close = False
 params['mp'].quantize_FCs = False #True
 params['mp'].wavecal_coeffs = [1.e9 / 6, -250]
 
-params['sp'].numframes = 10
-# params['ap'].n_wvl_init = 3
-# params['ap'].n_wvl_final = 3
+
+# params['ap'].contrast = 10**np.array([-3.5, -4, -4.5, -5] * 2)
+# params['ap'].companion_xy = [[2.5,0], [0,3], [-3.5,0], [0,-4], [4.5,0], [0,5], [-5.5,0],[0,-6]]
+params['ap'].contrast = [10**-3.5]
+params['ap'].companion_xy = [[2.5,0]]
+# params['ap'].n_wvl_init = 8
+# params['ap'].n_wvl_final = 16
+params['ap'].n_wvl_init = 2
+params['ap'].n_wvl_final = 2
+# params['sp'].numframes = 10
+params['sp'].numframes = 1
+
 
