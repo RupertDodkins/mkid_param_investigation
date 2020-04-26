@@ -88,17 +88,56 @@ class array_size():
 
         return cams
 
+class pix_yield():
+    def __init__(self, master_cam):
+        self.master_cam = master_cam
+        median_val = 0.8
+        self.multiplier = np.linspace(0.5,1.25,4)
+        self.vals = median_val * self.multiplier
+        self.vals[self.vals>1] = 1
+        self.params = master_cam.params
+        self.bad_inds = self.get_bad_inds(self.vals)
+
+    def update_device(self, new_cam, orig_cam, val, i):
+        bad_ind = self.bad_inds[i]
+        new_cam.pix_yield = val
+        new_cam.QE_map = self.add_bad_pix(self.master_cam.QE_map_all, bad_ind)
+        return new_cam
+
+    def get_bad_inds(self, pix_yields):
+        pix_yields = np.array(pix_yields)
+        min_yield = min(pix_yields)
+        max_yield = max(pix_yields)
+        amount = int(self.params['mp'].array_size[0] * self.params['mp'].array_size[1] * (1. - min_yield))
+        all_bad_inds = random.sample(list(range(self.params['mp'].array_size[0] * self.params['mp'].array_size[1])), amount)
+        # dprint(len(all_bad_inds))
+        bad_inds_inds = np.int_((1 - (pix_yields - min_yield) / (max_yield - min_yield)) * amount)
+        bad_inds = []
+        for bad_inds_ind in bad_inds_inds:
+            bad_inds.append(all_bad_inds[:bad_inds_ind])
+
+        return bad_inds
+
+    def add_bad_pix(self, QE_map_all, bad_ind):
+        dprint(len(bad_ind))
+        QE_map = np.array(QE_map_all, copy=True)
+        if len(bad_ind) > 0:
+            bad_y = np.int_(np.floor(bad_ind / self.params['mp'].array_size[1]))
+            bad_x = bad_ind % self.params['mp'].array_size[1]
+            QE_map[bad_x, bad_y] = 0
+
+        return QE_map
+
 class R_mean():
     def __init__(self, master_cam):
         # self.name = __file__.split('/')[-1].split('.')[0] if name is None else name
 
         self.master_cam = master_cam
-        # self.params = self.master_cam.params
         self.median_val = master_cam.params['mp'].R_mean
         self.multiplier = np.logspace(np.log10(0.1), np.log10(10), 7)
         self.vals = np.int_(np.round(self.median_val * self.multiplier))
 
-    def update_device(self, new_cam, orig_cam, val):
+    def update_device(self, new_cam, orig_cam, val, i):
         # metric_orig = getattr(self.params['mp'], self.name)
         new_cam.Rs = orig_cam.Rs - self.median_val + val
         new_cam.Rs[new_cam.Rs < 0] = 0
@@ -111,17 +150,20 @@ def create_cams(metric):
     for obj in metric.cams.keys():
         for i, val in enumerate(metric.vals):
             new_cam = copy.copy(metric.master_cam)
-            new_cam = metric.update_device(new_cam, metric.master_cam, val)
+            new_cam = metric.update_device(new_cam, metric.master_cam, val, i)
             metric.cams[obj].append(new_cam)
 
 def get_metric(name, master_cam):
     """
     wrapper for each metric class that automates the common steps among metrics
 
-    :param name:
-    :param master_cam:
+    :param name: str
+        metric_name should match the name of a class in this module
+    :param master_cam: mkids.Camera
+        master that all cams for each metric are derived from
     :return:
     """
+
     testdir = os.path.join(os.path.dirname(master_cam.params['iop'].testdir), name)
     MetricConfig = eval(name)
     metric_config = MetricConfig(master_cam)
