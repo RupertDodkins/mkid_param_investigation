@@ -18,7 +18,19 @@ import metrics
 from diagrams import contrcurve_plot, combo_performance
 from substitution import get_form_photons
 
-investigation = 'figure3'
+mode = 'develop'
+# mode = 'test'
+
+if mode == 'develop':
+    params['ap'].n_wvl_init = 2
+    params['ap'].n_wvl_final = 2
+    params['sp'].numframes = 1
+else:
+    params['ap'].n_wvl_init = 8
+    params['ap'].n_wvl_final = 16
+    params['sp'].numframes = 10
+
+investigation = f'figure3_{mode}'
 
 class ObservatoryMaster():
     """ Each repeat has new fields and a median device params to seed from, as well as noise data for scaling """
@@ -165,8 +177,7 @@ class MetricTester():
         obj = 'comp' if comps else 'star'
         for i, cam, metric_val in zip(range(len(self.metric.cams[obj])), self.metric.cams[obj], self.metric.vals):
 
-            if not hasattr(cam, 'stackcube'):
-                cam = get_form_photons(master_fields, cam, comps=comps)
+            cam = get_form_photons(master_fields, cam, comps=comps)
 
             self.metric.cams[obj][i] = cam
 
@@ -275,7 +286,7 @@ if __name__ == '__main__':
     repeats = 1  # number of medis runs to average over for the cont plots
     metric_names = ['numframes', 'array_size', 'pix_yield', 'dark_bright', 'R_mean', 'R_sig',
                    'g_mean', 'g_sig']  # 'g_mean_sig']# 'star_flux', 'exp_time', 'array_size_(rebin)',
-    # metric_names = ['numframes']
+    metric_names = ['R_mean']
 
     # collect the data
     all_cont_data = []
@@ -290,11 +301,11 @@ if __name__ == '__main__':
 
             # plt.rcParams["axes.prop_cycle"] = plt.cycler("color", plt.cm.viridis(np.linspace(0, 1, len(param.metric_multiplier))))
 
-            MetricConfig = getattr(metrics, metric_name)
-
-            testdir = os.path.join(params['iop'].datadir, investigation, str(r), metric_name)
-            metric_config = MetricConfig(metric_name, obs.cam, testdir)
-            metrics.check_attributes(metric_config)
+            metric_config = metrics.get_metric(metric_name, master_cam=obs.cam)
+            # MetricConfig = getattr(metrics, metric_name)
+            # testdir = os.path.join(params['iop'].datadir, investigation, str(r), metric_name)
+            # metric_config = MetricConfig(metric_name, obs.cam, testdir)
+            # metrics.check_attributes(metric_config)
 
             metric_test = MetricTester(obs, metric_config)
             metric_results = metric_test()
