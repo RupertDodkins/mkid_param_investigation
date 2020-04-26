@@ -128,17 +128,28 @@ class pix_yield():
 
         return QE_map
 
+class dark_bright():
+    def __init__(self, master_cam):
+        self.master_cam = master_cam
+        self.params = master_cam.params
+        median_val = self.params['mp'].dark_bright
+        self.multiplier = np.logspace(np.log10(10), np.log10(0.1), 7)
+        self.vals = np.int_(np.round(median_val * self.multiplier))
+
+    def update_device(self, new_cam, orig_cam, val, i):
+        new_cam.dark_bright = val
+        new_cam.dark_pix_frac = 1. / 2
+        new_cam.dark_per_step = self.params['sp'].sample_time * new_cam.dark_bright
+        return new_cam
+
 class R_mean():
     def __init__(self, master_cam):
-        # self.name = __file__.split('/')[-1].split('.')[0] if name is None else name
-
         self.master_cam = master_cam
         self.median_val = master_cam.params['mp'].R_mean
         self.multiplier = np.logspace(np.log10(0.1), np.log10(10), 7)
         self.vals = np.int_(np.round(self.median_val * self.multiplier))
 
     def update_device(self, new_cam, orig_cam, val, i):
-        # metric_orig = getattr(self.params['mp'], self.name)
         new_cam.Rs = orig_cam.Rs - self.median_val + val
         new_cam.Rs[new_cam.Rs < 0] = 0
         new_cam.Rs[orig_cam.Rs == 0] = 0
