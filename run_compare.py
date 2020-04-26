@@ -18,8 +18,8 @@ import metrics
 from diagrams import contrcurve_plot, combo_performance
 from substitution import get_form_photons
 
-mode = 'develop'
-# mode = 'test'
+# mode = 'develop'
+mode = 'test'
 
 if mode == 'develop':
     params['ap'].n_wvl_init = 2
@@ -136,10 +136,7 @@ class MetricTester():
                 else:
                     self.get_stackcubes(self.master_fields, comps=comps)
 
-                if hasattr(self.metric, 'pca_stackcubes'):
-                    pca_products.append(self.metric.pca_stackcubes(stackcubes, dps, comps))
-                else:
-                    pca_products.append(self.pca_stackcubes(comps))
+                pca_products.append(self.pca_stackcubes(comps))
 
             maps = pca_products[0]
             rad_samps = pca_products[1][1]
@@ -161,7 +158,7 @@ class MetricTester():
             try:
                 contrcurve_plot(self.metric.vals, rad_samps, thruputs, noises, conts)
                 if self.metric.name != 'array_size':
-                    body_spectra(maps, logZ=False)
+                    body_spectra(maps, logZ=False, title=self.metric.name)
                 else:
                     pass
             except UnboundLocalError:
@@ -284,9 +281,7 @@ if __name__ == '__main__':
 
     # define the configuration
     repeats = 1  # number of medis runs to average over for the cont plots
-    metric_names = ['numframes', 'array_size', 'pix_yield', 'dark_bright', 'R_mean', 'R_sig',
-                   'g_mean', 'g_sig']  # 'g_mean_sig']# 'star_flux', 'exp_time', 'array_size_(rebin)',
-    metric_names = ['R_mean']
+    metric_names = ['numframes', 'array_size', 'pix_yield', 'dark_bright', 'R_mean', 'g_mean']  # 'g_mean_sig']# 'star_flux', 'exp_time', 'array_size_(rebin)',
 
     # collect the data
     all_cont_data = []

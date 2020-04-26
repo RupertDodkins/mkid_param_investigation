@@ -9,13 +9,11 @@ import os
 import numpy as np
 import copy as copy
 import random
-import matplotlib.pyplot as plt
 
 from medis.plot_tools import quick2D, view_spectra
 from medis.utils import dprint
 
 from substitution import get_form_photons
-from master2 import params
 from medis.MKIDs import Camera
 
 class numframes():
@@ -123,6 +121,20 @@ class R_mean():
         new_cam.Rs[new_cam.Rs < 0] = 0
         new_cam.Rs[orig_cam.Rs == 0] = 0
         new_cam.sigs = new_cam.get_R_hyper(new_cam.Rs)
+        return new_cam
+
+class g_mean():
+    def __init__(self, master_cam):
+        self.master_cam = master_cam
+        self.params = self.master_cam.params
+        self.median_val = self.params['mp'].g_mean
+        self.multiplier = np.logspace(np.log10(0.5), np.log10(7/3), 7)
+        self.vals = self.median_val * self.multiplier
+
+    def update_device(self, new_cam, orig_cam, val, i):
+        new_cam.QE_map = orig_cam.QE_map - self.median_val + val
+        new_cam.QE_map[new_cam.QE_map < 0] = 0
+        new_cam.QE_map[orig_cam.QE_map == 0] = 0
         return new_cam
 
 def create_cams(metric):
