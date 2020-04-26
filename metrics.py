@@ -19,29 +19,16 @@ from master2 import params
 from medis.MKIDs import Camera
 
 class numframes():
-    def __init__(self, name, master_cam, testdir):
-        self.name = __file__.split('/')[-1].split('.')[0] if name is None else name
-
+    def __init__(self, master_cam):
+        self.master_cam = master_cam
         median_val = 10
         self.multiplier = np.logspace(np.log10(0.2), np.log10(5), 7)
         self.vals = np.int_(np.round(median_val * self.multiplier))
-        self.master_cam = master_cam
-        self.testdir = testdir
-        self.cams = self.create_adapted_cams()
 
-        if not os.path.exists(self.testdir):
-            os.mkdir(self.testdir)
-
-    def create_adapted_cams(self):
-        cams = {'star': [], 'comp': []}
-        for obj in cams.keys():
-            for i, val in enumerate(self.vals):
-                new_cam = copy.copy(self.master_cam)
-                new_cam.stackcube = None
-                new_cam.name = os.path.join(self.testdir, f'camera_{self.name}={val}_comp={obj}.pkl')
-                cams[obj].append(new_cam)
-
-        return cams
+    def update_device(self, new_cam, orig_cam, val, i):
+        new_cam.stackcube = None
+        # new_cam.name = os.path.join(self.testdir, f'camera_{self.name}={val}_comp={obj}.pkl')
+        return new_cam
 
     def get_stackcubes(self, master_fields, comps=True):
         obj = 'comp' if comps else 'star'
@@ -50,8 +37,6 @@ class numframes():
             cam = get_form_photons(reduced_fields, cam, comps=comps)
 
             self.cams[obj][i] = cam
-
-        # return self.cams
 
 class array_size():
     def __init__(self, name, master_cam, testdir):
