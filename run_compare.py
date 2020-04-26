@@ -238,8 +238,7 @@ class MetricTester():
         return metrics_out, fulloutput[2]
 
     def get_unoccult_psf(self, name):
-
-        params = copy.copy(self.params)
+        params = copy.deepcopy(self.params)
         params['sp'].save_fields = True
         params['ap'].companion = False
         params['tp'].cg_type = None
@@ -282,6 +281,7 @@ if __name__ == '__main__':
     # define the configuration
     repeats = 1  # number of medis runs to average over for the cont plots
     metric_names = ['numframes', 'array_size', 'pix_yield', 'dark_bright', 'R_mean', 'g_mean']  # 'g_mean_sig']# 'star_flux', 'exp_time', 'array_size_(rebin)',
+    # metric_names = ['array_size', 'pix_yield']
 
     # collect the data
     all_cont_data = []

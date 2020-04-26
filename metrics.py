@@ -45,7 +45,7 @@ class array_size():
         self.vals = np.int_(np.round(self.median_val * np.sqrt(self.multiplier)))
 
     def update_device(self, new_cam, orig_cam, val, i):
-        params = copy.copy(self.params)
+        params = copy.deepcopy(self.params)
         params['mp'].array_size = np.array([val] * 2)
         new_cam = Camera(params, usesave=False, fields=False)  # these two args mean no fields will be produced
         new_cam.lod = (val / self.median_val) * params['mp'].lod
@@ -141,7 +141,7 @@ def create_cams(metric):
     metric.cams = {'star': [], 'comp': []}
     for obj in metric.cams.keys():
         for i, val in enumerate(metric.vals):
-            new_cam = copy.copy(metric.master_cam)
+            new_cam = copy.deepcopy(metric.master_cam)
             new_cam = metric.update_device(new_cam, metric.master_cam, val, i)
             metric.cams[obj].append(new_cam)
 
