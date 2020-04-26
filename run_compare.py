@@ -6,7 +6,7 @@ import pickle
 import copy
 
 from vip_hci import phot, metrics, pca
-from vip_hci.metrics.contrcurve import noise_per_annulus
+from vip_hci.metrics.contrcurve import noise_per_annulus, contrast_curve
 
 from medis.telescope import Telescope
 from medis.MKIDs import Camera
@@ -14,7 +14,7 @@ from medis.utils import dprint
 from medis.plot_tools import quick2D, view_spectra, body_spectra
 
 from master2 import params
-from metrics import MetricConfig
+import metrics
 from diagrams import contrcurve_plot, combo_performance
 from substitution import get_form_photons
 
@@ -114,7 +114,7 @@ class MetricTester():
 
         dprint(self.performance_data)
         if not os.path.exists(self.performance_data):
-            self.metric.create_adapted_cams()
+            # self.metric.create_adapted_cams()
 
             comps_ = [True, False]
             pca_products = []
@@ -148,7 +148,10 @@ class MetricTester():
         if debug:
             try:
                 contrcurve_plot(self.metric.vals, rad_samps, thruputs, noises, conts)
-                body_spectra(maps, logZ=False, )
+                if self.metric.name != 'array_size':
+                    body_spectra(maps, logZ=False)
+                else:
+                    pass
             except UnboundLocalError:
                 dprint('thruputs and noises not saved in old versions :(')
                 # raise UnboundLocalError
@@ -216,14 +219,11 @@ class MetricTester():
 
     def eval_method(self, cube, algo, psf_template, angle_list, algo_dict, fwhm=6, star_phot=1, dp=None):
         dprint(fwhm, star_phot)
-        fulloutput = metrics.contrcurve.contrast_curve(cube=cube, interp_order=2,
-                                                       angle_list=angle_list, psf_template=psf_template,
-                                                       fwhm=fwhm, pxscale=self.platescale / 1000,
-                                                       # wedge=(-45, 45), int(dp.lod[0])
-                                                       starphot=star_phot, algo=algo, nbranch=1,
-                                                       adimsdi='double', ncomp=7, ncomp2=None,
-                                                       debug=False, plot=False, theta=0, full_output=True, fc_snr=100,
-                                                       dp=dp, **algo_dict)
+        fulloutput = contrast_curve(cube=cube, interp_order=2, angle_list=angle_list, psf_template=psf_template,
+                                    fwhm=fwhm, pxscale=self.platescale / 1000, starphot=star_phot, algo=algo, nbranch=1,
+                                    adimsdi='double', ncomp=7, ncomp2=None, debug=False, plot=False, theta=0,
+                                    full_output=True, fc_snr=100, # wedge=(-45, 45), int(dp.lod[0])
+                                    dp=dp, **algo_dict)
         metrics_out = [fulloutput[0]['throughput'], fulloutput[0]['noise'], fulloutput[0]['sensitivity_student'],
                        fulloutput[0]['sigma corr'], fulloutput[0]['distance']]
         metrics_out = np.array(metrics_out)
@@ -250,11 +250,6 @@ class MetricTester():
 
         return psf_template
 
-def fmt(x, pos):
-    a, b = '{:.0e}'.format(x).split('e')
-    b = int(b)
-    return r'${} e^{{{}}}$'.format(a, b)
-
 def find_nearest(array, value):
     array = np.asarray(array)
     idx = (np.abs(array - value)).argmin()
@@ -278,9 +273,9 @@ if __name__ == '__main__':
 
     # define the configuration
     repeats = 1  # number of medis runs to average over for the cont plots
-    # metric_names = ['numframes', 'array_size', 'array_size_(rebin)', 'pix_yield', 'dark_bright', 'R_mean', 'R_sig',
-    #                'g_mean', 'g_sig']  # 'g_mean_sig']# 'star_flux', 'exp_time'
-    metric_names = ['numframes']
+    metric_names = ['numframes', 'array_size', 'pix_yield', 'dark_bright', 'R_mean', 'R_sig',
+                   'g_mean', 'g_sig']  # 'g_mean_sig']# 'star_flux', 'exp_time', 'array_size_(rebin)',
+    # metric_names = ['numframes']
 
     # collect the data
     all_cont_data = []
@@ -292,22 +287,21 @@ if __name__ == '__main__':
 
         comp_images, cont_data, metric_multi_list, metric_vals_list = [], [], [], []
         for metric_name in metric_names:
-            # metric_module = importlib.import_module(metric_name)
-            # if metric_name in sys.modules:  # if the module has been loaded before it would be skipped and the params not initialized
-            #     dprint(metric_name)
-            #     metric_module = importlib.reload(metric_module)
 
             # plt.rcParams["axes.prop_cycle"] = plt.cycler("color", plt.cm.viridis(np.linspace(0, 1, len(param.metric_multiplier))))
 
+            MetricConfig = getattr(metrics, metric_name)
+
             testdir = os.path.join(params['iop'].datadir, investigation, str(r), metric_name)
-            # metric_config = metric_module.MetricConfig(obs.cam, testdir)
             metric_config = MetricConfig(metric_name, obs.cam, testdir)
+            metrics.check_attributes(metric_config)
 
             metric_test = MetricTester(obs, metric_config)
             metric_results = metric_test()
             
             comp_images.append(metric_results['maps'])
             cont_data.append([metric_results['rad_samps'],metric_results['conts']])
+
             # store the mutlipliers but flip those that achieve better contrast when the metric is decreasing
             if metric_name in ['R_sig', 'g_sig', 'dark_bright']:  # 'dark_bright',
                 metric_multi_list.append(metric_config.multiplier[::-1])

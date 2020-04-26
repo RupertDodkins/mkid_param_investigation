@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm, SymLogNorm
@@ -6,6 +7,11 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.ticker as ticker
 
 from medis.utils import dprint
+
+def fmt(x, pos):
+    a, b = '{:.0e}'.format(x).split('e')
+    b = int(b)
+    return r'${} e^{{{}}}$'.format(a, b)
 
 def contrcurve_plot(metric_vals, rad_samps, thruputs, noises, conts):
     fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(14, 3.4))
