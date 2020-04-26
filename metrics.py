@@ -39,39 +39,23 @@ class numframes():
             self.cams[obj][i] = cam
 
 class array_size():
-    def __init__(self, name, master_cam, testdir):
-        self.name = __file__.split('/')[-1].split('.')[0] if name is None else name
-
+    def __init__(self, master_cam):
         self.master_cam = master_cam
         self.params = self.master_cam.params
-        median_val = self.params['mp'].array_size[0]
+        self.median_val = self.params['mp'].array_size[0]
         self.multiplier = np.logspace(np.log10(0.25), np.log10(4), 7)
-        self.vals = np.int_(np.round(median_val * np.sqrt(self.multiplier)))
+        self.vals = np.int_(np.round(self.median_val * np.sqrt(self.multiplier)))
 
-        self.testdir = testdir
-        self.cams = self.create_adapted_cams()
-
-        if not os.path.exists(self.testdir):
-            os.mkdir(self.testdir)
-
-    def create_adapted_cams(self):
-        """ Create adapted cams """
-        cams = {'star': [], 'comp': []}
-        metric_orig = getattr(self.params['mp'], self.name)
-        for obj in cams.keys():
-            for i, val in enumerate(self.vals):
-                # mp.array_size = np.array([metric_val] * 2)
-                params = copy.copy(self.params)
-                params['mp'].array_size = np.array([val] * 2)
-                new_cam = Camera(params, usesave=False, fields=False)  # these two args mean no fields will be produced
-                new_cam.lod = (val / metric_orig[0]) * params['mp'].lod
-                dprint(val, metric_orig[0], new_cam.lod)
-                new_cam.platescale = params['mp'].platescale * metric_orig[0] / val
-                new_cam.array_size = np.array([val, val])
-                new_cam.name = os.path.join(self.testdir, f'camera_{self.name}={val}_comp={obj}.pkl')
-                cams[obj].append(new_cam)
-
-        return cams
+    def update_device(self, new_cam, orig_cam, val, i):
+        params = copy.copy(self.params)
+        params['mp'].array_size = np.array([val] * 2)
+        new_cam = Camera(params, usesave=False, fields=False)  # these two args mean no fields will be produced
+        new_cam.lod = (val / self.median_val) * params['mp'].lod
+        dprint(val, self.median_val, new_cam.lod)
+        new_cam.platescale = params['mp'].platescale * self.median_val / val
+        new_cam.array_size = np.array([val, val])
+        # new_cam.name = os.path.join(self.testdir, f'camera_{self.name}={val}_comp={obj}.pkl')
+        return new_cam
 
 class pix_yield():
     def __init__(self, master_cam):
