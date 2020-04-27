@@ -18,8 +18,8 @@ import metrics
 from diagrams import contrcurve_plot, combo_performance
 from substitution import get_form_photons
 
-# mode = 'develop'
-mode = 'test'
+mode = 'develop'
+# mode = 'test'
 
 if mode == 'develop':
     params['ap'].n_wvl_init = 2
@@ -111,7 +111,6 @@ class MetricTester():
         self.wvl_range = obs.params['ap'].wvl_range
         self.n_wvl_final = obs.params['ap'].n_wvl_final
         self.lod = obs.params['mp'].lod
-        self.platescale = obs.params['tp'].platescale
         self.master_cam = obs.cam
         self.master_fields = obs.fields
 
@@ -213,25 +212,25 @@ class MetricTester():
                     dprint(fwhm)
                 method_out = self.eval_method(cam.stackcube, pca.pca, psf_template,
                                          np.zeros((cam.stackcube.shape[1])), algo_dict,
-                                         fwhm=fwhm, star_phot=star_phot, dp=cam)
+                                         fwhm=fwhm, star_phot=star_phot, cam=cam)
 
                 thruput, noise, cont, sigma_corr, dist = method_out[0]
                 thruputs.append(thruput)
                 noises.append(noise)
                 conts.append(cont)
-                rad_samp = self.platescale * dist
+                rad_samp = cam.platescale * dist
                 rad_samps.append(rad_samp)
                 maps.append(method_out[1])
             plt.show(block=True)
             return maps, rad_samps, thruputs, noises, conts
 
-    def eval_method(self, cube, algo, psf_template, angle_list, algo_dict, fwhm=6, star_phot=1, dp=None):
+    def eval_method(self, cube, algo, psf_template, angle_list, algo_dict, cam, fwhm=6, star_phot=1):
         dprint(fwhm, star_phot)
         fulloutput = contrast_curve(cube=cube, interp_order=2, angle_list=angle_list, psf_template=psf_template,
-                                    fwhm=fwhm, pxscale=self.platescale / 1000, starphot=star_phot, algo=algo, nbranch=1,
-                                    adimsdi='double', ncomp=7, ncomp2=None, debug=False, plot=False, theta=0,
+                                    fwhm=fwhm, pxscale=cam.platescale / 1000, starphot=star_phot, algo=algo, nbranch=1,
+                                    adimsdi='double', ncomp=7, ncomp2=None, debug=True, plot=True, theta=0,
                                     full_output=True, fc_snr=100, # wedge=(-45, 45), int(dp.lod[0])
-                                    dp=dp, **algo_dict)
+                                    cam=cam, **algo_dict)
         metrics_out = [fulloutput[0]['throughput'], fulloutput[0]['noise'], fulloutput[0]['sensitivity_student'],
                        fulloutput[0]['sigma corr'], fulloutput[0]['distance']]
         metrics_out = np.array(metrics_out)
@@ -280,8 +279,8 @@ if __name__ == '__main__':
 
     # define the configuration
     repeats = 1  # number of medis runs to average over for the cont plots
-    metric_names = ['numframes', 'array_size', 'pix_yield', 'dark_bright', 'R_mean', 'g_mean']  # 'g_mean_sig']# 'star_flux', 'exp_time', 'array_size_(rebin)',
-    # metric_names = ['array_size', 'pix_yield']
+    # metric_names = ['numframes', 'array_size', 'pix_yield', 'dark_bright', 'R_mean', 'g_mean']  # 'g_mean_sig']# 'star_flux', 'exp_time', 'array_size_(rebin)',
+    metric_names = ['dark_bright']
 
     # collect the data
     all_cont_data = []
@@ -297,11 +296,6 @@ if __name__ == '__main__':
             # plt.rcParams["axes.prop_cycle"] = plt.cycler("color", plt.cm.viridis(np.linspace(0, 1, len(param.metric_multiplier))))
 
             metric_config = metrics.get_metric(metric_name, master_cam=obs.cam)
-            # MetricConfig = getattr(metrics, metric_name)
-            # testdir = os.path.join(params['iop'].datadir, investigation, str(r), metric_name)
-            # metric_config = MetricConfig(metric_name, obs.cam, testdir)
-            # metrics.check_attributes(metric_config)
-
             metric_test = MetricTester(obs, metric_config)
             metric_results = metric_test()
             
@@ -325,7 +319,7 @@ if __name__ == '__main__':
     three_lod_sep = 0.3
     six_lod_sep = 2 * three_lod_sep
     fhqm = 0.03
-    for p, param_name in enumerate(param_names):
+    for p, param_name in enumerate(metric_names):
         metric_multi = metric_multi_list[p]
         metric_vals = metric_vals_list[p]
         rad_samps, mean_conts, err_conts = parse_cont_data(all_cont_data, p)
