@@ -8,6 +8,7 @@ import copy
 from vip_hci import phot, metrics, pca
 from vip_hci.metrics.contrcurve import noise_per_annulus, contrast_curve
 
+from medis.medis_main import RunMedis
 from medis.telescope import Telescope
 from medis.MKIDs import Camera
 from medis.utils import dprint
@@ -25,9 +26,9 @@ if mode == 'develop':
     params['ap'].n_wvl_init = 2
     params['ap'].n_wvl_final = 2
     params['sp'].numframes = 1
-else:
-    params['ap'].n_wvl_init = 8
-    params['ap'].n_wvl_final = 16
+elif mode == 'test':
+    params['ap'].n_wvl_init = 5
+    params['ap'].n_wvl_final = 10
     params['sp'].numframes = 10
 
 investigation = f'figure3_{mode}'
@@ -78,27 +79,31 @@ class ObservatoryMaster():
         :return:
         """
 
-        # sim = mm.RunMedis(params=self.params, name=self.masterdir, product='fields')
-        # observation = sim()
+        backup_fields = os.path.join(self.masterdir, 'fields_planet_slices.h5')
+
         self.params['iop'].update(self.masterdir)
-        telescope = Telescope(params)
-        observation = telescope()
+        telescope = Telescope(self.params, usesave=False)
+        fields = telescope()['fields']
 
-        obs_seq = np.abs(observation['fields'][:, -1]) ** 2
+        if os.path.exists(backup_fields):
+            fields_master = fields
+        else:
+            assert len(fields.shape) == 6
 
-        fields_master = np.zeros((self.params['sp'].numframes, self.params['ap'].n_wvl_final, 2, self.params['sp'].grid_size,
-                                self.params['sp'].grid_size))
-        collapse_comps = np.sum(obs_seq[:, :, 1:], axis=2)
-        fields_master[:, :, 0] = obs_seq[:, :, 0]
-        fields_master[:, :, 1] = collapse_comps
-        if plot:
-            view_spectra(fields_master[0,:,0], logZ=True, show=True, title='star cube timestep 0')
-            view_spectra(fields_master[0,:,1], logZ=True, show=True, title='planets cube timestep 0')
+            obs_seq = np.abs(fields[:, -1]) ** 2
 
-        dprint(f"Reduced shape of obs_seq = {np.shape(fields_master)} (numframes x nwsamp x 2 x grid x grid)")
+            fields_master = np.zeros((self.params['sp'].numframes, self.params['ap'].n_wvl_final, 2, self.params['sp'].grid_size,
+                                    self.params['sp'].grid_size))
+            collapse_comps = np.sum(obs_seq[:, :, 1:], axis=2)
+            fields_master[:, :, 0] = obs_seq[:, :, 0]
+            fields_master[:, :, 1] = collapse_comps
+            if plot:
+                body_spectra(fields_master[0], logZ=True)
 
-        os.rename(self.params['iop'].fields, os.path.join(self.masterdir, 'fields_planet_slices.h5'))
-        telescope.save_fields(fields_master)
+            dprint(f"Reduced shape of obs_seq = {np.shape(fields_master)} (numframes x nwsamp x 2 x grid x grid)")
+
+            os.rename(self.params['iop'].fields, backup_fields)
+            telescope.save_fields(fields_master)
 
         return fields_master
 
@@ -227,8 +232,8 @@ class MetricTester():
     def eval_method(self, cube, algo, psf_template, angle_list, algo_dict, cam, fwhm=6, star_phot=1):
         dprint(fwhm, star_phot)
         fulloutput = contrast_curve(cube=cube, interp_order=2, angle_list=angle_list, psf_template=psf_template,
-                                    fwhm=fwhm, pxscale=cam.platescale / 1000, starphot=star_phot, algo=algo, nbranch=1,
-                                    adimsdi='double', ncomp=7, ncomp2=None, debug=True, plot=True, theta=0,
+                                    fwhm=fwhm, pxscale=cam.platescale / 1000, starphot=star_phot, algo=algo, nbranch=3,
+                                    adimsdi='double', ncomp=7, ncomp2=None, debug=False, plot=False, theta=0,
                                     full_output=True, fc_snr=100, # wedge=(-45, 45), int(dp.lod[0])
                                     cam=cam, **algo_dict)
         metrics_out = [fulloutput[0]['throughput'], fulloutput[0]['noise'], fulloutput[0]['sensitivity_student'],
@@ -252,7 +257,7 @@ class MetricTester():
         observation = telescope()
         fields = observation['fields']
         psf_template = np.abs(fields[0, -1, :, 0, 1:, 1:]) ** 2
-        # view_spectra(psf_template, logZ=True)
+        # body_spectra(psf_template, logZ=True)
 
         return psf_template
 
@@ -278,9 +283,8 @@ def parse_cont_data(all_cont_data, p):
 if __name__ == '__main__':
 
     # define the configuration
-    repeats = 1  # number of medis runs to average over for the cont plots
-    # metric_names = ['numframes', 'array_size', 'pix_yield', 'dark_bright', 'R_mean', 'g_mean']  # 'g_mean_sig']# 'star_flux', 'exp_time', 'array_size_(rebin)',
-    metric_names = ['dark_bright']
+    repeats = 2  # number of medis runs to average over for the cont plots
+    metric_names = ['pix_yield', 'numframes', 'array_size', 'dark_bright', 'R_mean', 'g_mean'] 
 
     # collect the data
     all_cont_data = []
