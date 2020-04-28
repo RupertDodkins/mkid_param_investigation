@@ -26,7 +26,7 @@ if mode == 'develop':
     params['ap'].n_wvl_init = 2
     params['ap'].n_wvl_final = 2
     params['sp'].numframes = 1
-elif mode == 'test':
+else:
     params['ap'].n_wvl_init = 5
     params['ap'].n_wvl_final = 10
     params['sp'].numframes = 10
@@ -253,8 +253,8 @@ class MetricTester():
         params['iop'].update(self.metric.testdir)
         params['iop'].telescope = name
 
-        telescope = Telescope(self.params)
-        observation = telescope()
+        sim = RunMedis(params=params, name=self.metric.testdir, product='fields')
+        observation = sim()
         fields = observation['fields']
         psf_template = np.abs(fields[0, -1, :, 0, 1:, 1:]) ** 2
         # body_spectra(psf_template, logZ=True)
@@ -265,9 +265,6 @@ def find_nearest(array, value):
     array = np.asarray(array)
     idx = (np.abs(array - value)).argmin()
     return idx
-
-# def config_images(num_tests):
-#     plt.rcParams["axes.prop_cycle"] = plt.cycler("color", plt.cm.viridis(np.linspace(0, 1, num_tests)))
 
 def parse_cont_data(all_cont_data, p):
     rad_samps = all_cont_data[0, p, 0]  # both repeats should be equivalent
@@ -284,7 +281,7 @@ if __name__ == '__main__':
 
     # define the configuration
     repeats = 2  # number of medis runs to average over for the cont plots
-    metric_names = ['pix_yield', 'numframes', 'array_size', 'dark_bright', 'R_mean', 'g_mean'] 
+    metric_names = ['pix_yield', 'numframes', 'array_size', 'dark_bright', 'R_mean', 'g_mean']
 
     # collect the data
     all_cont_data = []
