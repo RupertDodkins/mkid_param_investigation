@@ -24,8 +24,7 @@ class numframes():
         self.vals = np.int_(np.round(median_val * self.multiplier))
 
     def update_device(self, new_cam, orig_cam, val, i):
-        new_cam.stackcube = None
-        # new_cam.name = os.path.join(self.testdir, f'camera_{self.name}={val}_comp={obj}.pkl')
+        # new_cam.stackcube = None
         return new_cam
 
     def get_stackcubes(self, master_fields, comps=True):
@@ -100,7 +99,7 @@ class dark_bright():
         self.master_cam = master_cam
         self.params = master_cam.params
         median_val = self.params['mp'].dark_bright
-        self.multiplier = np.logspace(np.log10(10), np.log10(0.1), 7)
+        self.multiplier = np.logspace(np.log10(100), np.log10(0.01), 7)
         self.vals = np.int_(np.round(median_val * self.multiplier))
 
     def update_device(self, new_cam, orig_cam, val, i):
@@ -142,7 +141,9 @@ def create_cams(metric):
     for obj in metric.cams.keys():
         for i, val in enumerate(metric.vals):
             new_cam = copy.deepcopy(metric.master_cam)
+            new_cam.stackcube = None
             new_cam = metric.update_device(new_cam, metric.master_cam, val, i)
+            new_cam.name = os.path.join(metric.testdir, f"camera_val={val}_comp={obj=='comp'}.pkl")
             metric.cams[obj].append(new_cam)
 
 def get_metric(name, master_cam):

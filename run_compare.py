@@ -25,7 +25,9 @@ mode = 'develop'
 if mode == 'develop':
     params['ap'].n_wvl_init = 2
     params['ap'].n_wvl_final = 2
-    params['sp'].numframes = 1
+    params['sp'].numframes = 2
+    params['ap'].contrast = [10 ** -3.5]
+    params['ap'].companion_xy = [[2.5, 0]]
 else:
     params['ap'].n_wvl_init = 5
     params['ap'].n_wvl_final = 10
@@ -49,17 +51,16 @@ class ObservatoryMaster():
         self.fields = self.make_fields_master()
 
         dprint(self.params['iop'].fields)
-        self.cam = Camera(params, fields=self.fields)
+        self.cam = Camera(params, fields=self.fields, usesave=True)
 
-        if not os.path.exists(self.params['iop'].median_noise):
-            self.get_median_noise()
+        self.cam = get_form_photons(self.fields, self.cam, comps=False)
+
+        # if not os.path.exists(self.params['iop'].median_noise):
+        self.median_noise = self.get_median_noise()
 
     def get_median_noise(self, plot=False):
         wsamples = np.linspace(self.params['ap'].wvl_range[0], self.params['ap'].wvl_range[1], self.params['ap'].n_wvl_final)
         scale_list = wsamples / (self.params['ap'].wvl_range[1] - self.params['ap'].wvl_range[0])
-
-        # if not hasattr(self.cam, 'stackcube'):
-        self.cam = get_form_photons(self.fields, self.cam, comps=False)
 
         frame_nofc = pca.pca(self.cam.stackcube, angle_list=np.zeros((self.cam.stackcube.shape[1])),
                              scale_list=scale_list, mask_center_px=None, adimsdi='double', ncomp=7, ncomp2=None,
@@ -71,7 +72,10 @@ class ObservatoryMaster():
         fwhm = self.params['mp'].lod
         mask = self.cam.QE_map == 0
         median_noise, vector_radd = noise_per_annulus(frame_nofc, separation=fwhm, fwhm=fwhm, mask=mask)
-        np.savetxt(self.params['iop'].median_noise, median_noise)
+        # np.savetxt(self.params['iop'].median_noise, median_noise)
+
+        #todo calc throughput here
+        return median_noise
 
     def make_fields_master(self, plot=False):
         """ The master fields file of which all the photons are seeded from according to their device
@@ -118,6 +122,7 @@ class MetricTester():
         self.lod = obs.params['mp'].lod
         self.master_cam = obs.cam
         self.master_fields = obs.fields
+        self.median_noise = obs.median_noise
 
         self.metric = metric
         self.testdir = metric.testdir
@@ -207,7 +212,7 @@ class MetricTester():
                 star_phot = 1.1
                 dprint(star_phot)
                 # body_spectra(psf_template, logZ=True)
-                algo_dict = {'scale_list': scale_list}
+                algo_dict = {'scale_list': scale_list, 'median_noise': self.median_noise}
                 # temp for those older format cache files
                 if hasattr(cam, 'lod'):
                     fwhm = cam.lod
@@ -215,31 +220,28 @@ class MetricTester():
                 else:
                     fwhm = self.lod
                     dprint(fwhm)
-                method_out = self.eval_method(cam.stackcube, pca.pca, psf_template,
-                                         np.zeros((cam.stackcube.shape[1])), algo_dict,
-                                         fwhm=fwhm, star_phot=star_phot, cam=cam)
 
-                thruput, noise, cont, sigma_corr, dist = method_out[0]
+                fulloutput = contrast_curve(cube=cam.stackcube, interp_order=2,
+                                            angle_list=np.zeros((cam.stackcube.shape[1])),
+                                            psf_template=psf_template, fwhm=fwhm, pxscale=cam.platescale / 1000,
+                                            starphot=star_phot, algo=pca.pca, nbranch=5, adimsdi='double', ncomp=7,
+                                            ncomp2=None, debug=False, plot=False, theta=0, fc_snr=100,
+                                            full_output=True, cam=cam, **algo_dict)
+                metrics_out = [fulloutput[0]['throughput'], fulloutput[0]['noise'],
+                               fulloutput[0]['sensitivity_student'],
+                               fulloutput[0]['sigma corr'], fulloutput[0]['distance']]
+                metrics_out = np.array(metrics_out)
+                # method_out =  metrics_out, fulloutput[2]
+
+                thruput, noise, cont, sigma_corr, dist = metrics_out
                 thruputs.append(thruput)
                 noises.append(noise)
                 conts.append(cont)
                 rad_samp = cam.platescale * dist
                 rad_samps.append(rad_samp)
-                maps.append(method_out[1])
+                maps.append(fulloutput[2])
             plt.show(block=True)
             return maps, rad_samps, thruputs, noises, conts
-
-    def eval_method(self, cube, algo, psf_template, angle_list, algo_dict, cam, fwhm=6, star_phot=1):
-        dprint(fwhm, star_phot)
-        fulloutput = contrast_curve(cube=cube, interp_order=2, angle_list=angle_list, psf_template=psf_template,
-                                    fwhm=fwhm, pxscale=cam.platescale / 1000, starphot=star_phot, algo=algo, nbranch=3,
-                                    adimsdi='double', ncomp=7, ncomp2=None, debug=False, plot=False, theta=0,
-                                    full_output=True, fc_snr=100, # wedge=(-45, 45), int(dp.lod[0])
-                                    cam=cam, **algo_dict)
-        metrics_out = [fulloutput[0]['throughput'], fulloutput[0]['noise'], fulloutput[0]['sensitivity_student'],
-                       fulloutput[0]['sigma corr'], fulloutput[0]['distance']]
-        metrics_out = np.array(metrics_out)
-        return metrics_out, fulloutput[2]
 
     def get_unoccult_psf(self, name):
         params = copy.deepcopy(self.params)
@@ -281,7 +283,7 @@ if __name__ == '__main__':
 
     # define the configuration
     repeats = 2  # number of medis runs to average over for the cont plots
-    metric_names = ['pix_yield', 'numframes', 'array_size', 'dark_bright', 'R_mean', 'g_mean']
+    metric_names = ['pix_yield','g_mean', 'numframes', 'array_size', 'dark_bright', 'R_mean', 'g_mean']
 
     # collect the data
     all_cont_data = []
