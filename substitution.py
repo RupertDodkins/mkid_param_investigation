@@ -17,7 +17,7 @@ def get_form_photons(fields, cam, comps=True, plot=False):
     """
 
     if os.path.exists(cam.name):
-        print('loading cam stackcube save at {cam.name}')
+        print(f'loading cam stackcube save at {cam.name}')
         with open(cam.name, 'rb') as handle:
             cam = pickle.load(handle)
     else:
