@@ -6,9 +6,8 @@ import pickle
 import copy
 
 from vip_hci import phot, metrics, pca
-from vip_hci.metrics.contrcurve import noise_per_annulus, contrast_curve
+import vip_hci.metrics.contrcurve as contrcurve
 
-from medis.medis_main import RunMedis
 from medis.telescope import Telescope
 from medis.MKIDs import Camera
 from medis.utils import dprint
@@ -17,10 +16,10 @@ from medis.plot_tools import quick2D, view_spectra, body_spectra
 from master2 import params
 import metrics
 from diagrams import contrcurve_plot, combo_performance
-from substitution import get_form_photons
+import substitution as subs
 
-mode = 'develop'
-# mode = 'test'
+# mode = 'develop'
+mode = 'test'
 
 if mode == 'develop':
     params['ap'].n_wvl_init = 2
@@ -31,51 +30,68 @@ if mode == 'develop':
 else:
     params['ap'].n_wvl_init = 5
     params['ap'].n_wvl_final = 10
-    params['sp'].numframes = 10
+    params['sp'].numframes = 5
+    # params['ap'].contrast = [10 ** -3.5]
+    # params['ap'].companion_xy = [[2.5, 0]]
 
 investigation = f'figure3_{mode}'
 
 class ObservatoryMaster():
-    """ Each repeat has new fields and a median device params to seed from, as well as noise data for scaling """
+    """ Each repeat has new fields to seed from, as well as throughput data on that median array """
     def __init__(self, params, iteration=0):
         self.params = params
         self.name = str(iteration)
         self.masterdir = os.path.join(params['iop'].datadir, investigation, self.name, 'master')
-        self.save_extension = 'camera.pkl'
-        self.fields_extension = 'fields.pkl'
 
-        self.params['iop'].median_noise = os.path.join(self.masterdir, 'median_noise_master.txt')
-        self.params['iop'].camera = os.path.join(self.masterdir, self.save_extension)
-        self.params['iop'].fields = os.path.join(self.masterdir, self.fields_extension)
+        self.nbranch = 2
+        self.ncomp = 7
+        self.fc_snr = 100
+        self.througput_file = os.path.join(self.masterdir,
+                                           f'throughput_nbranch={self.nbranch}_ncomp={self.ncomp}.pkl')
+
+        self.params['iop'].update(self.masterdir)
 
         self.fields = self.make_fields_master()
 
         dprint(self.params['iop'].fields)
         self.cam = Camera(params, fields=self.fields, usesave=True)
 
-        self.cam = get_form_photons(self.fields, self.cam, comps=False)
+        self.cam = subs.get_form_photons(self.fields, self.cam, comps=False)
 
-        # if not os.path.exists(self.params['iop'].median_noise):
-        self.median_noise = self.get_median_noise()
+        self.wsamples = np.linspace(params['ap'].wvl_range[0], params['ap'].wvl_range[1], params['ap'].n_wvl_final)
+        self.scale_list = self.wsamples / (params['ap'].wvl_range[1] - params['ap'].wvl_range[0])
 
-    def get_median_noise(self, plot=False):
-        wsamples = np.linspace(self.params['ap'].wvl_range[0], self.params['ap'].wvl_range[1], self.params['ap'].n_wvl_final)
-        scale_list = wsamples / (self.params['ap'].wvl_range[1] - self.params['ap'].wvl_range[0])
+        self.throughput, self.vector_radd = self.get_throughput()
 
-        frame_nofc = pca.pca(self.cam.stackcube, angle_list=np.zeros((self.cam.stackcube.shape[1])),
-                             scale_list=scale_list, mask_center_px=None, adimsdi='double', ncomp=7, ncomp2=None,
-                             collapse='median')
+    def get_throughput(self):
+        if os.path.exists(self.througput_file):
+            print(f'loading throughput from {self.througput_file}')
+            with open(self.througput_file, 'rb') as handle:
+                throughput, vector_radd = pickle.load(handle)
+        else:
+            unoccultname = os.path.join(self.params['iop'].testdir,
+                                        f'telescope_unoccult_arraysize={self.cam.array_size}')
+            psf_template = self.get_unoccult_psf(self.params, unoccultname)
 
-        if plot:
-            quick2D(frame_nofc, logZ=True)
+            algo_dict = {'scale_list': self.scale_list}
 
-        fwhm = self.params['mp'].lod
-        mask = self.cam.QE_map == 0
-        median_noise, vector_radd = noise_per_annulus(frame_nofc, separation=fwhm, fwhm=fwhm, mask=mask)
-        # np.savetxt(self.params['iop'].median_noise, median_noise)
+            median_fwhm = self.cam.lod if hasattr(self.cam, 'lod') else self.params['mp'].lod
+            median_wave = (self.wsamples[-1] + self.wsamples[0]) / 2
+            fwhm = median_fwhm * self.wsamples/median_wave
 
-        #todo calc throughput here
-        return median_noise
+            fulloutput = contrcurve.contrast_curve(cube=self.cam.stackcube, nbranch=self.nbranch, ncomp=self.ncomp,
+                                                   fc_snr=self.fc_snr, cam=self.cam,
+                                                   angle_list=np.zeros((self.cam.stackcube.shape[1])),
+                                                   psf_template=psf_template, interp_order=2, fwhm=fwhm,
+                                                   pxscale=self.cam.platescale / 1000,
+                                                   starphot=1.1, algo=pca.pca, adimsdi='double',
+                                                   ncomp2=None, debug=False, plot=False, theta=0,
+                                                   full_output=True, **algo_dict)
+            throughput, vector_radd = fulloutput[0]['throughput'], fulloutput[0]['distance']
+            with open(self.througput_file, 'wb') as handle:
+                pickle.dump((throughput, vector_radd), handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+        return throughput, vector_radd
 
     def make_fields_master(self, plot=False):
         """ The master fields file of which all the photons are seeded from according to their device
@@ -85,7 +101,6 @@ class ObservatoryMaster():
 
         backup_fields = os.path.join(self.masterdir, 'fields_planet_slices.h5')
 
-        self.params['iop'].update(self.masterdir)
         telescope = Telescope(self.params, usesave=False)
         fields = telescope()['fields']
 
@@ -111,18 +126,37 @@ class ObservatoryMaster():
 
         return fields_master
 
+    def get_unoccult_psf(self, params, name):
+        params = copy.deepcopy(params)
+        params['sp'].save_fields = True
+        params['ap'].companion = False
+        params['tp'].cg_type = None
+        params['sp'].numframes = 1
+        params['ap'].sample_time = 1e-3
+        params['sp'].save_list = ['detector']
+        params['sp'].save_to_disk = True
+        params['iop'].telescope = name + '.pkl'
+        params['iop'].fields = name + '.h5'
+
+        telescope = Telescope(params, usesave=True)
+        fields = telescope()['fields']
+        psf_template = np.abs(fields[0, -1, :, 0, 1:, 1:]) ** 2
+        # body_spectra(psf_template, logZ=True)
+
+        return psf_template
+
 class MetricTester():
     """ This instrument has the magical ability to quickly tune one device parameter during an observation """
     def __init__(self, obs, metric):
 
         self.params = obs.params
-
-        self.wvl_range = obs.params['ap'].wvl_range
-        self.n_wvl_final = obs.params['ap'].n_wvl_final
         self.lod = obs.params['mp'].lod
+        self.scale_list = obs.scale_list
+        self.ncomp = obs.ncomp
         self.master_cam = obs.cam
         self.master_fields = obs.fields
-        self.median_noise = obs.median_noise
+        self.vector_radd = obs.vector_radd
+        self.throughput = obs.throughput
 
         self.metric = metric
         self.testdir = metric.testdir
@@ -183,20 +217,18 @@ class MetricTester():
         obj = 'comp' if comps else 'star'
         for i, cam, metric_val in zip(range(len(self.metric.cams[obj])), self.metric.cams[obj], self.metric.vals):
 
-            cam = get_form_photons(master_fields, cam, comps=comps)
+            cam = subs.get_form_photons(master_fields, cam, comps=comps)
 
             self.metric.cams[obj][i] = cam
 
     def pca_stackcubes(self, comps=True):
-        wsamples = np.linspace(self.wvl_range[0], self.wvl_range[1], self.n_wvl_final)
-        scale_list = wsamples / (self.wvl_range[1] - self.wvl_range[0])
         maps = []
 
         if comps:
             for cam in self.metric.cams['comp']:
                 dprint(cam.stackcube.shape)
-                SDI = pca.pca(cam.stackcube, angle_list=np.zeros((cam.stackcube.shape[1])), scale_list=scale_list,
-                              mask_center_px=None, adimsdi='double', ncomp=7, ncomp2=None,
+                SDI = pca.pca(cam.stackcube, angle_list=np.zeros((cam.stackcube.shape[1])), scale_list=self.scale_list,
+                              mask_center_px=None, adimsdi='double', ncomp=self.ncomp, ncomp2=None,
                               collapse='median')
                 maps.append(SDI)
             return maps
@@ -205,63 +237,46 @@ class MetricTester():
             rad_samps, thruputs, noises, conts = [], [], [], []
             # for stackcube, dp in zip(stackcubes, dps):
             for cam in self.metric.cams['star']:
-                unoccultname = os.path.join(self.testdir, f'telescope_unoccult_arraysize={cam.array_size}.pkl')
-                psf_template = self.get_unoccult_psf(unoccultname)
-                # star_phot = phot.contrcurve.aperture_flux(np.sum(psf_template, axis=0), [sp.grid_size // 2],
-                #                                           [sp.grid_size // 2], mp.lod, 1)[0]*10**-3#1.5
-                star_phot = 1.1
-                dprint(star_phot)
-                # body_spectra(psf_template, logZ=True)
-                algo_dict = {'scale_list': scale_list, 'median_noise': self.median_noise}
-                # temp for those older format cache files
-                if hasattr(cam, 'lod'):
-                    fwhm = cam.lod
-                    dprint(fwhm)
-                else:
-                    fwhm = self.lod
-                    dprint(fwhm)
+                frame_nofc = pca.pca(cam.stackcube, angle_list=np.zeros((cam.stackcube.shape[1])),
+                                     scale_list=self.scale_list, mask_center_px=None, adimsdi='double', ncomp=7,
+                                     ncomp2=None, collapse='median')
 
-                fulloutput = contrast_curve(cube=cam.stackcube, interp_order=2,
-                                            angle_list=np.zeros((cam.stackcube.shape[1])),
-                                            psf_template=psf_template, fwhm=fwhm, pxscale=cam.platescale / 1000,
-                                            starphot=star_phot, algo=pca.pca, nbranch=5, adimsdi='double', ncomp=7,
-                                            ncomp2=None, debug=False, plot=False, theta=0, fc_snr=100,
-                                            full_output=True, cam=cam, **algo_dict)
-                metrics_out = [fulloutput[0]['throughput'], fulloutput[0]['noise'],
-                               fulloutput[0]['sensitivity_student'],
-                               fulloutput[0]['sigma corr'], fulloutput[0]['distance']]
-                metrics_out = np.array(metrics_out)
-                # method_out =  metrics_out, fulloutput[2]
+                # quick2D(frame_nofc, logZ=False, title='frame_nofc', show=False)
 
-                thruput, noise, cont, sigma_corr, dist = metrics_out
-                thruputs.append(thruput)
-                noises.append(noise)
-                conts.append(cont)
-                rad_samp = cam.platescale * dist
+                fwhm = cam.lod if hasattr(cam, 'lod') else self.params['mp'].lod
+                mask = cam.QE_map == 0
+                noise_samp, rad_samp = contrcurve.noise_per_annulus(frame_nofc, separation=1, fwhm=fwhm,
+                                                                         mask=mask)
+                radmin = self.vector_radd.astype(int).min()
+                cutin1 = np.where(rad_samp.astype(int) == radmin)[0][0]
+                noise_samp = noise_samp[cutin1:]
+                rad_samp = rad_samp[cutin1:]
+                radmax = self.vector_radd.astype(int).max()
+                cutin2 = np.where(rad_samp.astype(int) == radmax)[0][0]
+                noise_samp = noise_samp[:cutin2 + 1]
+                rad_samp = rad_samp[:cutin2 + 1]
+
+                win = min(noise_samp.shape[0] - 2, int(2 * fwhm))
+                if win % 2 == 0:
+                    win += 1
+                from scipy.signal import savgol_filter
+                noise_samp_sm = savgol_filter(noise_samp, polyorder=2, mode='nearest',
+                                              window_length=win)
+
+                starphot = 1.1
+                sigma = 5
+                cont_curve_samp = ((sigma * noise_samp_sm) / self.throughput) / starphot
+                cont_curve_samp[cont_curve_samp < 0] = 1
+                cont_curve_samp[cont_curve_samp > 1] = 1
+
+                thruputs.append(self.throughput)
+                noises.append(noise_samp_sm)
+                conts.append(cont_curve_samp)
+                rad_samp = cam.platescale * rad_samp
                 rad_samps.append(rad_samp)
-                maps.append(fulloutput[2])
+                maps.append(frame_nofc)
             plt.show(block=True)
             return maps, rad_samps, thruputs, noises, conts
-
-    def get_unoccult_psf(self, name):
-        params = copy.deepcopy(self.params)
-        params['sp'].save_fields = True
-        params['ap'].companion = False
-        params['tp'].cg_type = None
-        params['sp'].numframes = 1
-        params['ap'].sample_time = 1e-3
-        params['sp'].save_list = ['detector']
-
-        params['iop'].update(self.metric.testdir)
-        params['iop'].telescope = name
-
-        sim = RunMedis(params=params, name=self.metric.testdir, product='fields')
-        observation = sim()
-        fields = observation['fields']
-        psf_template = np.abs(fields[0, -1, :, 0, 1:, 1:]) ** 2
-        # body_spectra(psf_template, logZ=True)
-
-        return psf_template
 
 def find_nearest(array, value):
     array = np.asarray(array)
