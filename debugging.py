@@ -9,7 +9,7 @@ from medis.plot_tools import body_spectra, quick2D
 
 from run_compare import ObservatoryMaster, MetricTester
 import metrics
-from master2 import params
+from master import params
 
 
 def debugging_noise(metric_test):

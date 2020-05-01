@@ -6,7 +6,7 @@ from medis.twilight_colormaps import sunlight
 from matplotlib.colors import LogNorm
 import medis.medis_main as mm
 
-from master2 import params
+from master import params
 
 params['sp'].numframes = 1
 params['ap'].n_wvl_init = 3

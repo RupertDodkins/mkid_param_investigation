@@ -1,5 +1,5 @@
 import medis.medis_main as mm
-from master2 import params
+from master import params
 params['sp'].save_to_disk = True
 params['tp'].prescription = 'general_telescope'
 params['sp'].numframes = 1

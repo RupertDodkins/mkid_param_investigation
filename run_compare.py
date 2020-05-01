@@ -14,7 +14,7 @@ from medis.MKIDs import Camera
 from medis.utils import dprint
 from medis.plot_tools import quick2D, view_spectra, body_spectra
 
-from master2 import params
+from master import params
 import metrics
 from diagrams import contrcurve_plot, combo_performance
 import substitution as subs
