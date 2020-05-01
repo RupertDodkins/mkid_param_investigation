@@ -4,7 +4,35 @@ import pickle
 import matplotlib.pyplot as plt
 from medis.plot_tools import quick2D, view_spectra, body_spectra
 
-def get_form_photons(fields, cam, comps=True, plot=False):
+def get_ideal_photons(fields, cam, comps=True, plot=False):
+    ntime, nwave = fields.shape[0], fields.shape[1]
+
+    cam.stackcube = np.zeros((ntime, nwave, cam.array_size[1], cam.array_size[0]))
+    for step in range(len(fields)):
+        print(step)
+        if comps:
+            spectralcube = np.sum(fields[step], axis=1)
+        else:
+            spectralcube = fields[step, :, 0]
+
+        cube = cam.get_ideal_cube(spectralcube)
+        cam.stackcube[step] = cube
+
+    cam.stackcube /= np.sum(cam.stackcube)  # /sp.numframes
+    cam.stackcube = np.transpose(cam.stackcube, (1, 0, 2, 3))
+
+    if plot:
+        # plt.figure()
+        # plt.hist(cam.stackcube[cam.stackcube != 0].flatten(), bins=np.linspace(0, 1e4, 50))
+        # plt.yscale('log')
+        body_spectra(cam.stackcube, show=True, title='get ideal photons', nstd=6)
+
+    if cam.usesave:
+        cam.save()
+
+    return cam
+
+def get_form_photons(fields, cam, comps=True, plot=True):
     """
     Alternative to cam.__call__ that allows the user to specify whether the spectracube contains the planets
 
@@ -41,10 +69,10 @@ def get_form_photons(fields, cam, comps=True, plot=False):
         cam.stackcube = np.transpose(cam.stackcube, (1, 0, 2, 3))
 
         if plot:
-            plt.figure()
-            plt.hist(cam.stackcube[cam.stackcube != 0].flatten(), bins=np.linspace(0, 1e4, 50))
-            plt.yscale('log')
-            body_spectra(cam.stackcube, show=True, title='stackcube')
+            # plt.figure()
+            # plt.hist(cam.stackcube[cam.stackcube != 0].flatten(), bins=np.linspace(0, 1e4, 50))
+            # plt.yscale('log')
+            body_spectra(cam.stackcube, show=True, title='get form photons')
 
         if cam.usesave:
             cam.save()

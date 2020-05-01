@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pickle
 import copy
+from pprint import pprint
 
 from vip_hci import phot, metrics, pca
 import vip_hci.metrics.contrcurve as contrcurve
@@ -25,16 +26,18 @@ if mode == 'develop':
     params['ap'].n_wvl_init = 2
     params['ap'].n_wvl_final = 2
     params['sp'].numframes = 2
-    params['ap'].contrast = [10 ** -3.5]
-    params['ap'].companion_xy = [[2.5, 0]]
+    # params['ap'].contrast = [10 ** -3.5]
+    # params['ap'].companion_xy = [[4.5, 0]]
 else:
-    params['ap'].n_wvl_init = 5
-    params['ap'].n_wvl_final = 10
-    params['sp'].numframes = 5
+    params['ap'].n_wvl_init = 8
+    params['ap'].n_wvl_final = 16
+    params['sp'].numframes = 10
     # params['ap'].contrast = [10 ** -3.5]
     # params['ap'].companion_xy = [[2.5, 0]]
-
-investigation = f'figure3_{mode}'
+# params['tp'].obscure = False
+# params['sp'].sample_time = 0.5
+params['tp'].cg_type = 'Solid'
+investigation = f'figure3_{mode}_ideal_solid'
 
 class ObservatoryMaster():
     """ Each repeat has new fields to seed from, as well as throughput data on that median array """
@@ -51,12 +54,17 @@ class ObservatoryMaster():
 
         self.params['iop'].update(self.masterdir)
 
+        if params['sp'].verbose:
+            for param in params.values():
+                pprint(param.__dict__)
+
         self.fields = self.make_fields_master()
 
         dprint(self.params['iop'].fields)
         self.cam = Camera(params, fields=self.fields, usesave=True)
 
-        self.cam = subs.get_form_photons(self.fields, self.cam, comps=False)
+        # self.cam = subs.get_form_photons(self.fields, self.cam, comps=False)
+        self.cam = subs.get_ideal_photons(self.fields, self.cam, comps=False)
 
         self.wsamples = np.linspace(params['ap'].wvl_range[0], params['ap'].wvl_range[1], params['ap'].n_wvl_final)
         self.scale_list = self.wsamples / (params['ap'].wvl_range[1] - params['ap'].wvl_range[0])
@@ -69,9 +77,9 @@ class ObservatoryMaster():
             with open(self.througput_file, 'rb') as handle:
                 throughput, vector_radd = pickle.load(handle)
         else:
-            unoccultname = os.path.join(self.params['iop'].testdir,
-                                        f'telescope_unoccult_arraysize={self.cam.array_size}')
-            psf_template = self.get_unoccult_psf(self.params, unoccultname)
+            # unoccultname = os.path.join(self.params['iop'].testdir,
+            #                             f'telescope_unoccult_arraysize={self.cam.array_size}')
+            # psf_template = self.get_unoccult_psf(self.params, unoccultname)
 
             algo_dict = {'scale_list': self.scale_list}
 
@@ -82,7 +90,7 @@ class ObservatoryMaster():
             fulloutput = contrcurve.contrast_curve(cube=self.cam.stackcube, nbranch=self.nbranch, ncomp=self.ncomp,
                                                    fc_snr=self.fc_snr, cam=self.cam,
                                                    angle_list=np.zeros((self.cam.stackcube.shape[1])),
-                                                   psf_template=psf_template, interp_order=2, fwhm=fwhm,
+                                                   psf_template=self.psf_template[:,1:,1:], interp_order=2, fwhm=fwhm,
                                                    pxscale=self.cam.platescale / 1000,
                                                    starphot=1.1, algo=pca.pca, adimsdi='double',
                                                    ncomp2=None, debug=False, plot=False, theta=0,
@@ -101,23 +109,43 @@ class ObservatoryMaster():
 
         backup_fields = os.path.join(self.masterdir, 'fields_planet_slices.h5')
 
+        self.params['ap'].companion = False
+        self.contrast = copy.deepcopy(self.params['ap'].contrast)
+
         telescope = Telescope(self.params, usesave=False)
         fields = telescope()['fields']
+
+        unoccultname = os.path.join(self.params['iop'].testdir,
+                                    f'telescope_unoccult')
+        self.psf_template = self.get_unoccult_psf(self.params, unoccultname)
+        # body_spectra(self.psf_template)
 
         if os.path.exists(backup_fields):
             fields_master = fields
         else:
             assert len(fields.shape) == 6
 
+            collapse_comps = np.zeros((self.params['sp'].numframes, self.params['ap'].n_wvl_final, self.params['sp'].grid_size,
+                                    self.params['sp'].grid_size))
+            # body_spectra(self.psf_template)
+            for (x,y), scaling in zip(np.array(params['ap'].companion_xy) * 20, self.contrast):
+                cube = copy.deepcopy(self.psf_template)
+                print(x,y, scaling)
+                cube = np.roll(cube,-int(x),2)
+                cube = np.roll(cube,-int(y),1)
+                cube *= scaling
+                # body_spectra(cube)
+                collapse_comps+=cube
+
             obs_seq = np.abs(fields[:, -1]) ** 2
 
             fields_master = np.zeros((self.params['sp'].numframes, self.params['ap'].n_wvl_final, 2, self.params['sp'].grid_size,
                                     self.params['sp'].grid_size))
-            collapse_comps = np.sum(obs_seq[:, :, 1:], axis=2)
+            # collapse_comps = np.sum(obs_seq[:, :, 1:], axis=2)
             fields_master[:, :, 0] = obs_seq[:, :, 0]
             fields_master[:, :, 1] = collapse_comps
             if plot:
-                body_spectra(fields_master[0], logZ=True)
+                body_spectra(fields_master[0], logZ=True, title='star and comps cube')
 
             dprint(f"Reduced shape of obs_seq = {np.shape(fields_master)} (numframes x nwsamp x 2 x grid x grid)")
 
@@ -140,7 +168,8 @@ class ObservatoryMaster():
 
         telescope = Telescope(params, usesave=True)
         fields = telescope()['fields']
-        psf_template = np.abs(fields[0, -1, :, 0, 1:, 1:]) ** 2
+        # psf_template = np.abs(fields[0, -1, :, 0, 1:, 1:]) ** 2
+        psf_template = np.abs(fields[0, -1, :, 0]) ** 2
         # body_spectra(psf_template, logZ=True)
 
         return psf_template
@@ -201,7 +230,7 @@ class MetricTester():
             try:
                 contrcurve_plot(self.metric.vals, rad_samps, thruputs, noises, conts)
                 if self.metric.name != 'array_size':
-                    body_spectra(maps, logZ=False, title=self.metric.name)
+                    body_spectra(maps, logZ=False, title=self.metric.name, nstd=15)
                 else:
                     pass
             except UnboundLocalError:
@@ -217,7 +246,8 @@ class MetricTester():
         obj = 'comp' if comps else 'star'
         for i, cam, metric_val in zip(range(len(self.metric.cams[obj])), self.metric.cams[obj], self.metric.vals):
 
-            cam = subs.get_form_photons(master_fields, cam, comps=comps)
+            # cam = subs.get_form_photons(master_fields, cam, comps=comps)
+            cam = subs.get_ideal_photons(master_fields, cam, comps=comps)
 
             self.metric.cams[obj][i] = cam
 
@@ -298,7 +328,8 @@ if __name__ == '__main__':
 
     # define the configuration
     repeats = 2  # number of medis runs to average over for the cont plots
-    metric_names = ['pix_yield','g_mean', 'numframes', 'array_size', 'dark_bright', 'R_mean', 'g_mean']
+    # metric_names = ['pix_yield','g_mean', 'numframes', 'array_size', 'dark_bright', 'R_mean', 'g_mean']
+    metric_names = ['ideal_placeholder']
 
     # collect the data
     all_cont_data = []

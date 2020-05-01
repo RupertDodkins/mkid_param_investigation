@@ -13,8 +13,17 @@ import random
 from medis.plot_tools import quick2D, view_spectra
 from medis.utils import dprint
 
-from substitution import get_form_photons
+from substitution import get_form_photons, get_ideal_photons
 from medis.MKIDs import Camera
+
+class ideal_placeholder():
+    def __init__(self, master_cam):
+        self.master_cam = master_cam
+        self.multiplier = [1]
+        self.vals = [1]
+
+    def update_device(self, new_cam, orig_cam, val, i):
+        return new_cam
 
 class numframes():
     def __init__(self, master_cam):
@@ -32,6 +41,7 @@ class numframes():
         for i, cam, metric_val in zip(range(len(self.cams[obj])), self.cams[obj], self.vals):
             reduced_fields = master_fields[:metric_val]
             cam = get_form_photons(reduced_fields, cam, comps=comps)
+            # cam = get_ideal_photons(reduced_fields, cam, comps=comps)
 
             self.cams[obj][i] = cam
 
