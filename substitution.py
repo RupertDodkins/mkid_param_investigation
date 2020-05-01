@@ -32,7 +32,7 @@ def get_ideal_photons(fields, cam, comps=True, plot=False):
 
     return cam
 
-def get_form_photons(fields, cam, comps=True, plot=True):
+def get_form_photons(fields, cam, comps=True, plot=False):
     """
     Alternative to cam.__call__ that allows the user to specify whether the spectracube contains the planets
 

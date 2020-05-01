@@ -48,6 +48,7 @@ params['tp'].cg_size = 3  # physical size or lambda/D size
 params['tp'].cg_size_units = "l/D"  # "m" or "l/D"
 params['tp'].lyot_size = 0.75  # units are in fraction of surface blocked
 params['tp'].fl_cg_lens = params['tp'].f_lens  # m
+params['tp'].detector = 'mkid'
 
 params['mp'].phase_uncertainty = True
 params['mp'].phase_background = False

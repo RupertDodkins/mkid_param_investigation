@@ -19,25 +19,20 @@ import metrics
 from diagrams import contrcurve_plot, combo_performance
 import substitution as subs
 
-# mode = 'develop'
-mode = 'test'
+mode = 'develop'
+# mode = 'test'
 
 if mode == 'develop':
     params['ap'].n_wvl_init = 2
     params['ap'].n_wvl_final = 2
     params['sp'].numframes = 2
-    # params['ap'].contrast = [10 ** -3.5]
-    # params['ap'].companion_xy = [[4.5, 0]]
 else:
     params['ap'].n_wvl_init = 8
     params['ap'].n_wvl_final = 16
     params['sp'].numframes = 10
-    # params['ap'].contrast = [10 ** -3.5]
-    # params['ap'].companion_xy = [[2.5, 0]]
-# params['tp'].obscure = False
-# params['sp'].sample_time = 0.5
-params['tp'].cg_type = 'Solid'
-investigation = f'figure3_{mode}_ideal_solid'
+
+params['tp'].detector='mkid'
+investigation = f"figure3_{mode}_{params['tp'].detector}"
 
 class ObservatoryMaster():
     """ Each repeat has new fields to seed from, as well as throughput data on that median array """
@@ -63,8 +58,12 @@ class ObservatoryMaster():
         dprint(self.params['iop'].fields)
         self.cam = Camera(params, fields=self.fields, usesave=True)
 
-        # self.cam = subs.get_form_photons(self.fields, self.cam, comps=False)
-        self.cam = subs.get_ideal_photons(self.fields, self.cam, comps=False)
+        if self.params['tp'].detector == 'mkid':
+            self.cam = subs.get_form_photons(self.fields, self.cam, comps=False)
+        elif self.params['tp'].detector == 'ideal':
+            self.cam = subs.get_ideal_photons(self.fields, self.cam, comps=False)
+        else:
+            raise NotImplementedError
 
         self.wsamples = np.linspace(params['ap'].wvl_range[0], params['ap'].wvl_range[1], params['ap'].n_wvl_final)
         self.scale_list = self.wsamples / (params['ap'].wvl_range[1] - params['ap'].wvl_range[0])
@@ -246,8 +245,12 @@ class MetricTester():
         obj = 'comp' if comps else 'star'
         for i, cam, metric_val in zip(range(len(self.metric.cams[obj])), self.metric.cams[obj], self.metric.vals):
 
-            # cam = subs.get_form_photons(master_fields, cam, comps=comps)
-            cam = subs.get_ideal_photons(master_fields, cam, comps=comps)
+            if self.params['tp'].detector == 'mkid':
+                cam = subs.get_form_photons(master_fields, cam, comps=comps)
+            elif self.params['tp'].detector == 'ideal':
+                cam = subs.get_ideal_photons(master_fields, cam, comps=comps)
+            else:
+                raise NotImplementedError
 
             self.metric.cams[obj][i] = cam
 
