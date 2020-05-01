@@ -8,24 +8,20 @@ import medis.medis_main as mm
 
 from master2 import params
 
-params['sp'].save_to_disk = True
-params['tp'].prescription = 'general_telescope'
 params['sp'].numframes = 1
 params['ap'].n_wvl_init = 3
 params['ap'].n_wvl_final = 3
 params['sp'].memory_limit = 9.e9 /15
 params['sp'].save_list = np.array(['atmosphere', 'add_aber', 'deformable mirror', 'add_aber', 'pre_coron', 'detector'])
 save_labels = np.array(['Entrance Pupil', 'After CPA', 'After DM', 'After NCPA', 'Before Occult.', 'Detector'])
-params['tp'].use_atmos = True
+params['ap'].companion = False
 
 if __name__ == '__main__':  # required for multiprocessing - make sure globals are set before though
 
-    sim = mm.RunMedis(params=params, name='figure1_2', product='fields')
+    sim = mm.RunMedis(params=params, name='figure1_3', product='fields')
     observation = sim()
     cpx_sequence = observation['fields']
 
-    # fp_sampling = sampling[-1][:]
-    # print(fp_sampling, cpx_sequence.shape)
     spectral_train_phase = np.angle(cpx_sequence[0,:-2,:,0])
     spectral_train_amp = np.abs(cpx_sequence[0,-2:,:,0]**2)
     spectral_train_grid = np.concatenate((spectral_train_phase,spectral_train_amp), axis=0)
