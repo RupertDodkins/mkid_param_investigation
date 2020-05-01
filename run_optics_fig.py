@@ -11,7 +11,6 @@ from master2 import params
 params['sp'].numframes = 1
 params['ap'].n_wvl_init = 3
 params['ap'].n_wvl_final = 3
-params['sp'].memory_limit = 9.e9 /15
 params['sp'].save_list = np.array(['atmosphere', 'add_aber', 'deformable mirror', 'add_aber', 'pre_coron', 'detector'])
 save_labels = np.array(['Entrance Pupil', 'After CPA', 'After DM', 'After NCPA', 'Before Occult.', 'Detector'])
 params['ap'].companion = False

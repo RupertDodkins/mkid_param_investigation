@@ -5,7 +5,6 @@ params['tp'].prescription = 'general_telescope'
 params['sp'].numframes = 1
 params['ap'].n_wvl_init = 3
 params['ap'].n_wvl_final = 3
-params['sp'].memory_limit = 9.e9 /15
 params['tp'].use_atmos = True
 
 if __name__ == '__main__':

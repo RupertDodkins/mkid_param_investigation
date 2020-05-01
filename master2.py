@@ -11,7 +11,8 @@ params['sp'].cont_save = True
 params['sp'].grid_size = 512
 params['sp'].closed_loop = False
 params['sp'].save_to_disk = True
-params['sp'].memory_limit = 9.e9 /15
+params['sp'].memory_limit = 9 /15  # GB
+params['sp'].sample_time = 0.5
 
 params['ap'].companion = True
 params['ap'].star_flux = int(1e9)
