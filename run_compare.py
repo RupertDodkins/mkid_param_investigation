@@ -1,10 +1,10 @@
-import os, sys
-import importlib
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 import pickle
 import copy
 from pprint import pprint
+from scipy.signal import savgol_filter
 
 from vip_hci import phot, metrics, pca
 import vip_hci.metrics.contrcurve as contrcurve
@@ -19,8 +19,8 @@ import metrics
 from diagrams import contrcurve_plot, combo_performance
 import substitution as subs
 
-mode = 'develop'
-# mode = 'test'
+# mode = 'develop'
+mode = 'test'
 
 if mode == 'develop':
     params['ap'].n_wvl_init = 2
@@ -31,7 +31,7 @@ else:
     params['ap'].n_wvl_final = 16
     params['sp'].numframes = 10
 
-params['tp'].detector='mkid'
+params['tp'].detector='ideal'
 investigation = f"figure3_{mode}_{params['tp'].detector}"
 
 class ObservatoryMaster():
@@ -114,8 +114,7 @@ class ObservatoryMaster():
         telescope = Telescope(self.params, usesave=False)
         fields = telescope()['fields']
 
-        unoccultname = os.path.join(self.params['iop'].testdir,
-                                    f'telescope_unoccult')
+        unoccultname = os.path.join(self.params['iop'].testdir, f'telescope_unoccult')
         self.psf_template = self.get_unoccult_psf(self.params, unoccultname)
         # body_spectra(self.psf_template)
 
@@ -192,8 +191,6 @@ class MetricTester():
         self.performance_data = os.path.join(self.testdir, 'performance_data.pkl')
 
     def __call__(self, debug=True):
-        # if debug:
-        #     check_contrast_contriubtions(self.metric.vals, metric_name, self.master_input, comps=False)
 
         dprint(self.performance_data)
         if not os.path.exists(self.performance_data):
@@ -268,47 +265,59 @@ class MetricTester():
 
         else:
             rad_samps, thruputs, noises, conts = [], [], [], []
-            # for stackcube, dp in zip(stackcubes, dps):
             for cam in self.metric.cams['star']:
                 frame_nofc = pca.pca(cam.stackcube, angle_list=np.zeros((cam.stackcube.shape[1])),
                                      scale_list=self.scale_list, mask_center_px=None, adimsdi='double', ncomp=7,
                                      ncomp2=None, collapse='median')
 
-                # quick2D(frame_nofc, logZ=False, title='frame_nofc', show=False)
+                # quick2D(frame_nofc, logZ=False, title='frame_nofc', show=True)
 
                 fwhm = cam.lod if hasattr(cam, 'lod') else self.params['mp'].lod
                 mask = cam.QE_map == 0
                 noise_samp, rad_samp = contrcurve.noise_per_annulus(frame_nofc, separation=1, fwhm=fwhm,
                                                                          mask=mask)
-                radmin = self.vector_radd.astype(int).min()
+
+                if metric_name == 'array_size':
+                    _, vector_radd = contrcurve.noise_per_annulus(frame_nofc, separation=fwhm,
+                                                                  fwhm=fwhm, wedge=(0,360), mask=mask)
+
+                else:
+                    vector_radd = self.vector_radd
+
+                # crop the noise and radial sampling measurements the limits of the throughput measurement
+                radmin = vector_radd.astype(int).min()
                 cutin1 = np.where(rad_samp.astype(int) == radmin)[0][0]
                 noise_samp = noise_samp[cutin1:]
                 rad_samp = rad_samp[cutin1:]
-                radmax = self.vector_radd.astype(int).max()
+                radmax = vector_radd.astype(int).max()
                 cutin2 = np.where(rad_samp.astype(int) == radmax)[0][0]
                 noise_samp = noise_samp[:cutin2 + 1]
                 rad_samp = rad_samp[:cutin2 + 1]
 
+                if metric_name == 'array_size':
+                    throughput = np.interp(rad_samp * cam.platescale,
+                                           self.vector_radd.values * self.master_cam.platescale, self.throughput)
+                else:
+                    throughput = self.throughput
+
                 win = min(noise_samp.shape[0] - 2, int(2 * fwhm))
-                if win % 2 == 0:
-                    win += 1
-                from scipy.signal import savgol_filter
+                if win % 2 == 0: win += 1
                 noise_samp_sm = savgol_filter(noise_samp, polyorder=2, mode='nearest',
                                               window_length=win)
 
                 starphot = 1.1
                 sigma = 5
-                cont_curve_samp = ((sigma * noise_samp_sm) / self.throughput) / starphot
+                cont_curve_samp = ((sigma * noise_samp_sm) / throughput) / starphot
                 cont_curve_samp[cont_curve_samp < 0] = 1
                 cont_curve_samp[cont_curve_samp > 1] = 1
 
-                thruputs.append(self.throughput)
+                thruputs.append(throughput)
                 noises.append(noise_samp_sm)
                 conts.append(cont_curve_samp)
                 rad_samp = cam.platescale * rad_samp
                 rad_samps.append(rad_samp)
                 maps.append(frame_nofc)
-            plt.show(block=True)
+
             return maps, rad_samps, thruputs, noises, conts
 
 def find_nearest(array, value):
