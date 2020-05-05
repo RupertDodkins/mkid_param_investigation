@@ -30,6 +30,7 @@ class numframes():
         self.master_cam = master_cam
         median_val = 10
         self.multiplier = np.logspace(np.log10(0.2), np.log10(5), 7)
+        # self.multiplier = np.logspace(np.log10(0.2), np.log10(5), 2)
         self.vals = np.int_(np.round(median_val * self.multiplier))
 
     def update_device(self, new_cam, orig_cam, val, i):
@@ -57,6 +58,7 @@ class array_size():
         params = copy.deepcopy(self.params)
         params['mp'].array_size = np.array([val] * 2)
         new_cam = Camera(params, usesave=False, fields=False)  # these two args mean no fields will be produced
+        new_cam.usesave = orig_cam.usesave  # new cam will have usesave False so set it here to what you actually want
         new_cam.lod = (val / self.median_val) * params['mp'].lod
         dprint(val, self.median_val, new_cam.lod)
         new_cam.platescale = params['mp'].platescale * self.median_val / val
@@ -108,14 +110,18 @@ class dark_bright():
     def __init__(self, master_cam):
         self.master_cam = master_cam
         self.params = master_cam.params
-        median_val = self.params['mp'].dark_bright
-        self.multiplier = np.logspace(np.log10(100), np.log10(0.01), 7)
+        median_val = 2e1#self.params['mp'].dark_bright
+        # self.multiplier = np.logspace(np.log10(10), np.log10(0.1), 7)
+        self.multiplier = np.logspace(np.log10(10), np.log10(0.1), 3)
         self.vals = np.int_(np.round(median_val * self.multiplier))
+        print(self.vals)
 
     def update_device(self, new_cam, orig_cam, val, i):
+        new_cam.params['mp'].dark_counts = True
         new_cam.dark_bright = val
-        new_cam.dark_pix_frac = 1. / 2
-        new_cam.dark_per_step = self.params['sp'].sample_time * new_cam.dark_bright
+        new_cam.dark_per_step = self.params['sp'].sample_time * new_cam.dark_bright * new_cam.array_size[0] * new_cam.array_size[1] * new_cam.dark_pix_frac
+        dprint('dark_per_step:', new_cam.dark_per_step, 'sample_time: ', self.params['sp'].sample_time,
+               'dark_bright: ', new_cam.dark_bright, 'pixels: ', new_cam.array_size[0] * new_cam.array_size[1], new_cam.dark_pix_frac)
         return new_cam
 
 class R_mean():

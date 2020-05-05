@@ -5,6 +5,7 @@ import pickle
 import copy
 from pprint import pprint
 from scipy.signal import savgol_filter
+from scipy.interpolate import InterpolatedUnivariateSpline
 
 from vip_hci import phot, metrics, pca
 import vip_hci.metrics.contrcurve as contrcurve
@@ -23,15 +24,15 @@ import substitution as subs
 mode = 'test'
 
 if mode == 'develop':
-    params['ap'].n_wvl_init = 2
-    params['ap'].n_wvl_final = 2
-    params['sp'].numframes = 2
-else:
     params['ap'].n_wvl_init = 8
     params['ap'].n_wvl_final = 16
     params['sp'].numframes = 10
+else:
+    params['ap'].n_wvl_init = 8
+    params['ap'].n_wvl_final = 16
+    # params['sp'].numframes = 10
 
-params['tp'].detector='ideal'
+params['tp'].detector='mkid'
 investigation = f"figure3_{mode}_{params['tp'].detector}"
 
 class ObservatoryMaster():
@@ -56,19 +57,21 @@ class ObservatoryMaster():
         self.fields = self.make_fields_master()
 
         dprint(self.params['iop'].fields)
-        self.cam = Camera(params, fields=self.fields, usesave=True)
+        self.cam = Camera(params, fields=False, usesave=True)
+        if self.cam.usesave:
+            self.cam.save()
 
-        if self.params['tp'].detector == 'mkid':
-            self.cam = subs.get_form_photons(self.fields, self.cam, comps=False)
-        elif self.params['tp'].detector == 'ideal':
-            self.cam = subs.get_ideal_photons(self.fields, self.cam, comps=False)
-        else:
-            raise NotImplementedError
+        # if self.params['tp'].detector == 'mkid':
+        #     self.cam = subs.get_form_photons(self.fields, self.cam, comps=False)
+        # elif self.params['tp'].detector == 'ideal':
+        #     self.cam = subs.get_ideal_photons(self.fields, self.cam, comps=False)
+        # else:
+        #     raise NotImplementedError
 
         self.wsamples = np.linspace(params['ap'].wvl_range[0], params['ap'].wvl_range[1], params['ap'].n_wvl_final)
         self.scale_list = self.wsamples / (params['ap'].wvl_range[1] - params['ap'].wvl_range[0])
 
-        self.throughput, self.vector_radd = self.get_throughput()
+        # self.throughput, self.vector_radd = self.get_throughput()
 
     def get_throughput(self):
         if os.path.exists(self.througput_file):
@@ -117,6 +120,9 @@ class ObservatoryMaster():
         unoccultname = os.path.join(self.params['iop'].testdir, f'telescope_unoccult')
         self.psf_template = self.get_unoccult_psf(self.params, unoccultname)
         # body_spectra(self.psf_template)
+
+        if plot:
+            body_spectra(fields[0], logZ=True, title='make_fields_master')
 
         if os.path.exists(backup_fields):
             fields_master = fields
@@ -179,11 +185,13 @@ class MetricTester():
         self.params = obs.params
         self.lod = obs.params['mp'].lod
         self.scale_list = obs.scale_list
-        self.ncomp = obs.ncomp
+        self.ncomp = 5#obs.ncomp
+        self.collapse = 'median'
         self.master_cam = obs.cam
         self.master_fields = obs.fields
-        self.vector_radd = obs.vector_radd
-        self.throughput = obs.throughput
+        # self.vector_radd = obs.vector_radd
+        # self.throughput = obs.throughput
+        self.wsamples = obs.wsamples
 
         self.metric = metric
         self.testdir = metric.testdir
@@ -193,6 +201,7 @@ class MetricTester():
     def __call__(self, debug=True):
 
         dprint(self.performance_data)
+        # self.performance_data = '/Users/dodkins/MKIDSim/mkid_param_invest/figure3_develop_mkid_lowerflux/1/max_count/performance_data.pkl'
         if not os.path.exists(self.performance_data):
             # self.metric.create_adapted_cams()
 
@@ -204,13 +213,15 @@ class MetricTester():
                 else:
                     self.get_stackcubes(self.master_fields, comps=comps)
 
-                pca_products.append(self.pca_stackcubes(comps))
+            #     pca_products.append(self.pca_stackcubes(comps))
+            #
+            # maps = pca_products[0]
+            # rad_samps = pca_products[1][1]
+            # thruputs = pca_products[1][2]
+            # noises = pca_products[1][3]
+            # conts = pca_products[1][4]
 
-            maps = pca_products[0]
-            rad_samps = pca_products[1][1]
-            thruputs = pca_products[1][2]
-            noises = pca_products[1][3]
-            conts = pca_products[1][4]
+            maps, rad_samps, thruputs, noises, conts = self.pca_stackcubes()
 
             with open(self.performance_data, 'wb') as handle:
                 pickle.dump((maps, rad_samps, thruputs, noises, conts, self.metric.vals), handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -226,9 +237,10 @@ class MetricTester():
             try:
                 contrcurve_plot(self.metric.vals, rad_samps, thruputs, noises, conts)
                 if self.metric.name != 'array_size':
-                    body_spectra(maps, logZ=False, title=self.metric.name, nstd=15)
+                    body_spectra(maps, logZ=False, title=self.metric.name)#, vlim=(-2,2)) for no-normed
                 else:
                     pass
+                plt.show(block=True)
             except UnboundLocalError:
                 dprint('thruputs and noises not saved in old versions :(')
                 # raise UnboundLocalError
@@ -251,7 +263,121 @@ class MetricTester():
 
             self.metric.cams[obj][i] = cam
 
-    def pca_stackcubes(self, comps=True):
+    def pca_stackcubes(self):
+        maps, rad_samps, thruputs, noises, conts = [], [], [], [], []
+        cams = self.metric.cams
+        colors = [f'C{i}' for i in range(len(self.metric.cams['star']))]
+        # fig, axes = plt.subplots(1,6)
+        fig, axes = plt.subplots(1,3)
+
+        dprint(np.shape(axes))
+        for i in range(len(cams['comp'])):
+            comp_cube = cams['comp'][i].stackcube
+            dprint(comp_cube.shape)
+            frame_comp = pca.pca(comp_cube, angle_list=np.zeros((comp_cube.shape[1])), scale_list=self.scale_list,
+                          mask_center_px=None, adimsdi='double', ncomp=self.ncomp, ncomp2=None,
+                          collapse=self.collapse)
+            maps.append(frame_comp)
+
+            nocomp_cube = cams['star'][i].stackcube
+            frame_nocomp = pca.pca(nocomp_cube, angle_list=np.zeros((nocomp_cube.shape[1])),
+                                 scale_list=self.scale_list, mask_center_px=None, adimsdi='double', ncomp=self.ncomp,
+                                 ncomp2=None, collapse=self.collapse)
+
+            median_fwhm = cams['star'][i].lod if hasattr(cams['star'][i], 'lod') else self.params['mp'].lod
+            median_wave = (self.wsamples[-1] + self.wsamples[0]) / 2
+            fwhm = median_fwhm * self.wsamples/median_wave
+
+            mask = cams['star'][i].QE_map == 0
+
+            print('check whether to be using mask here?!')
+            noise_samp, rad_samp = contrcurve.noise_per_annulus(frame_nocomp, separation=1, fwhm=median_fwhm,
+                                                                mask=mask)
+
+            xy = np.array(params['ap'].companion_xy) * 20 * cams['star'][i].sampling / cams['star'][i].platescale
+            px, py = (cams['star'][i].array_size/2 - xy).T
+            cx, cy = cams['star'][i].array_size/2
+            dists = np.sqrt((py-cy)**2 + (px-cx)**2)
+            # body_spectra(np.sum(comp_cube, axis=1), title='in comp time collapse', show=False)
+            # injected_flux=[contrcurve.aperture_flux(np.sum(comp_cube-nocomp_cube, axis=1)[i], py, px, fwhm[i]/1.5, ap_factor=1) for i in range(comp_cube.shape[0])]
+            injected_flux=[contrcurve.aperture_flux(np.sum(comp_cube, axis=1)[i], py, px, fwhm[i]/1.5, ap_factor=1, plot=False) for i in range(comp_cube.shape[0])]
+            # [axes[i+3].plot(dists, influx_wave) for influx_wave in injected_flux]
+            injected_flux = np.mean(injected_flux, axis=0)
+
+            # if i ==0 or i == len(self.metric.cams['star'])-1:
+                # body_spectra(comp_cube, title='comp', show=False)
+                # body_spectra(nocomp_cube, title='no', show=False)
+                # body_spectra(comp_cube-nocomp_cube, title='diff', show=False)
+                # body_spectra([np.sum(comp_cube, axis=(0,1))], title='sum comp', logZ=True, show=False)
+                # body_spectra([np.sum(nocomp_cube, axis=(0,1))], title='sum nocomp', logZ=True, show=False)
+                # body_spectra([np.sum(comp_cube, axis=(0,1))-np.sum(nocomp_cube, axis=(0,1))], title='sum then diff', logZ=True, show=False)
+                # body_spectra([], title='comp', logZ=True, show=False)
+            body_spectra([frame_comp, frame_nocomp, frame_comp-frame_nocomp], title='comp, nocomp, diff', logZ=False, show=False,vlim=(-2e-7,2e-7))# vlim=(-2,2))#, vlim=(-2e-7,2e-7))
+            body_spectra([np.sum(comp_cube, axis=1)[::4], np.sum(nocomp_cube, axis=1)[::4]], title='input: comp, no comp', logZ=False, show=False,vlim=(-1e-5,1e-5))# vlim=(-2,2))#, vlim=(-1e-5,1e-5))
+            body_spectra(np.sum(comp_cube-nocomp_cube, axis=1)[::4], title='diiff input cube', logZ=False, show=False)#, vlim=(-2,2))
+                # body_spectra([(frame_comp-frame_nocomp)/(np.sum(comp_cube-nocomp_cube, axis=(0,1)))], title='throughput', logZ=True, show=False)
+
+            # recovered_flux = contrcurve.aperture_flux((frame_comp - frame_nocomp), py, px, median_fwhm/1.5, ap_factor=1, )
+            recovered_flux = contrcurve.aperture_flux((frame_comp), py, px, median_fwhm/1.5, ap_factor=1, plot=False)
+            # thruput = recovered_flux*1e6 #/ injected_flux
+            thruput = recovered_flux/ injected_flux
+
+            thruput[np.where(thruput < 0)] = 0
+
+
+            # plt.figure()
+            axes[0].plot(dists, thruput, c=colors[i])
+            axes[1].plot(dists, injected_flux, c=colors[i])
+            axes[2].plot(dists, recovered_flux, c=colors[i], label=f'{self.metric.vals[i]}')
+            axes[2].legend()
+            # plt.plot(rad_samp, noise_samp)
+            # plt.show()
+
+            win = min(noise_samp.shape[0] - 2, int(2 * median_fwhm))
+            if win % 2 == 0: win += 1
+            noise_samp_sm = savgol_filter(noise_samp, polyorder=2, mode='nearest', window_length=win)
+
+
+            # thruput_mean_log = np.log10(thruput + 1e-5)
+            # f = InterpolatedUnivariateSpline(dists, thruput_mean_log, k=2)
+            # thruput_interp_log = f(rad_samp)
+            # thruput_interp = 10 ** thruput_interp_log
+            # thruput_interp[thruput_interp <= 0] = np.nan  # 1e-5
+
+            # thruput_interp = np.interp(rad_samp, dists, thruput)
+
+            from scipy.interpolate import interp1d
+            # f = interp1d(dists, thruput, fill_value='extrapolate')
+            # thruput_interp = f(rad_samp)
+            thruput_com = thruput.reshape(4,-1, order='F').mean(axis=0)
+            dists_com = dists.reshape(4,-1, order='F').mean(axis=0)
+
+            thruput_com_log = np.log10(thruput_com + 1e-5)
+            f = interp1d(dists_com, thruput_com_log, fill_value='extrapolate')
+            thruput_interp_log = f(rad_samp)
+            thruput_interp = 10 ** thruput_interp_log
+
+            axes[0].plot(dists_com, thruput_com, marker='o', c=colors[i])
+
+            print(thruput, thruput_interp)
+            axes[0].plot(rad_samp, thruput_interp, c=colors[i])
+
+            starphot = 1.1
+            sigma = 5
+            cont_curve_samp = ((sigma * noise_samp_sm) / thruput_interp) / starphot
+            cont_curve_samp[cont_curve_samp < 0] = 1
+            cont_curve_samp[cont_curve_samp > 1] = 1
+
+            thruputs.append(thruput_interp)
+            noises.append(noise_samp_sm)
+            conts.append(cont_curve_samp)
+            rad_samp = cams['star'][i].platescale * rad_samp
+            rad_samps.append(rad_samp)
+            # maps.append(frame_nocomp)
+        plt.show(block=True)
+        return maps, rad_samps, thruputs, noises, conts
+
+    def pca_stackcubes_old(self, comps=True):
         maps = []
 
         if comps:
@@ -297,6 +423,8 @@ class MetricTester():
                 if metric_name == 'array_size':
                     throughput = np.interp(rad_samp * cam.platescale,
                                            self.vector_radd.values * self.master_cam.platescale, self.throughput)
+                # elif metric_name == 'dark_bright':
+                #     throughput = self.manual_throughput(cam.stackcube, frame_nofc)
                 else:
                     throughput = self.throughput
 
@@ -340,8 +468,12 @@ if __name__ == '__main__':
 
     # define the configuration
     repeats = 2  # number of medis runs to average over for the cont plots
-    # metric_names = ['pix_yield','g_mean', 'numframes', 'array_size', 'dark_bright', 'R_mean', 'g_mean']
-    metric_names = ['ideal_placeholder']
+    metric_names = ['array_size', 'g_mean', 'numframes','R_mean', 'dark_bright','pix_yield']
+    # metric_names = ['ideal_placeholder']
+    # metric_names = ['dark_bright']
+    metric_names = ['max_count']
+    # metric_names = ['array_size', 'g_mean']
+
 
     # collect the data
     all_cont_data = []
@@ -363,13 +495,15 @@ if __name__ == '__main__':
             comp_images.append(metric_results['maps'])
             cont_data.append([metric_results['rad_samps'],metric_results['conts']])
 
-            # store the mutlipliers but flip those that achieve better contrast when the metric is decreasing
-            if metric_name in ['R_sig', 'g_sig', 'dark_bright']:  # 'dark_bright',
-                metric_multi_list.append(metric_config.multiplier[::-1])
-                metric_vals_list.append(metric_config.vals[::-1])
-            else:
-                metric_multi_list.append(metric_config.multiplier)
-                metric_vals_list.append(metric_config.vals)
+            # # store the mutlipliers but flip those that achieve better contrast when the metric is decreasing
+            # if metric_name in ['R_sig', 'g_sig', 'dark_bright']:  # 'dark_bright',
+            #     metric_multi_list.append(metric_config.multiplier[::-1])
+            #     metric_vals_list.append(metric_config.vals[::-1])
+            # else:
+
+            vals = metric_config.vals if metric_name != 'numframes' else metric_config.vals*params['sp'].sample_time
+            metric_multi_list.append(metric_config.multiplier)
+            metric_vals_list.append(vals)
 
         cont_data = np.array(cont_data)
         dprint(cont_data.shape)
