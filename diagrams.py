@@ -37,7 +37,7 @@ def combo_performance(maps, rad_samps, conts, metric_vals, param_name, plot_inds
                       metric_multi=None, three_lod_conts=None, three_lod_errs=None, six_lod_conts=None,
                       six_lod_errs=None, savedir=''):
 
-    # plt.rcParams["axes.prop_cycle"] = plt.cycler("color", plt.cm.viridis(np.linspace(0, 1, len(conts))))
+    plt.rcParams["axes.prop_cycle"] = plt.cycler("color", plt.cm.viridis(np.linspace(0, 1, len(conts))))
     letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i']
     labels = ['i', 'ii', 'iii', 'iv', 'v']
     title = r'  $I / I^{*}$'
@@ -46,17 +46,19 @@ def combo_performance(maps, rad_samps, conts, metric_vals, param_name, plot_inds
 
     fig, axes = plt.subplots(nrows=1, ncols=4, figsize=(14, 3.4))
     param_name = param_name.replace('_', ' ')
-    if param_name == 'R mean': param_name = r'$R_\mu$'
-    if param_name == 'R sig': param_name = r'$R_\sigma$'
-    if param_name == 'g mean': param_name = r'QE$_\mu$'
-    if param_name == 'g sig': param_name = r'QE$_\sigma$'
-    fig.suptitle(param_name, x=0.515)
+    if param_name == 'R mean': param_name = r'$R$'
+    if param_name == 'g mean': param_name = r'QE'
+    if param_name == 'array size': param_name = r'$w$'
+    if param_name == 'numframes': param_name = r'$\tau$'
+    if param_name == 'dark bright': param_name = r'$d$'
+    if param_name == 'pix yield': param_name = r'$Y$'
+    # fig.suptitle(param_name, x=0.515)
 
     dprint(metric_vals, plot_inds)
     for m, ax in enumerate(axes[:2]):
-        im = ax.imshow(maps[plot_inds[m]], interpolation='none', origin='lower', vmin=vmin, vmax=vmax,
+        im = ax.imshow(maps[plot_inds[m]], interpolation='none', vmin=vmin, vmax=vmax, #origin='lower',
                        norm=SymLogNorm(linthresh=1e-8), cmap="inferno")
-        ax.text(0.05, 0.05, r'$P=$' + str(metric_vals[plot_inds[m]]), transform=ax.transAxes, fontweight='bold',
+        ax.text(0.05, 0.05, f'{param_name}$=$' + str(metric_vals[plot_inds[m]]), transform=ax.transAxes, #fontweight='bold',
                 color='w', fontsize=16)
         # anno =
         ax.text(0.04, 0.9, labels[m], transform=ax.transAxes, fontweight='bold', color='w', fontsize=22,
@@ -91,9 +93,9 @@ def combo_performance(maps, rad_samps, conts, metric_vals, param_name, plot_inds
     axes[2].set_xlabel('Radial Separation')
     axes[2].tick_params(direction='in', which='both', right=True, top=True)
     axes[2].set_ylabel('5$\sigma$ Contrast')
-    planet_seps = np.arange(2.5, 6.5, 0.5) * 0.1
+    planet_seps = np.arange(1.5, 7.5, 0.5) * 0.1
     # contrast = np.array([[e,e] for e in np.arange(-3.5,-5.5,-0.5)]).flatten()
-    contrast = np.array([-3.5, -4, -4.5, -5] * 2)
+    contrast = np.array([-3.5, -4, -4.5, -5] * 3)
     axes[2].scatter(planet_seps, 10 ** contrast, marker='o', color='k', label='Planets')
     axes[2].legend(ncol=2, fontsize=8, loc='upper right')
     axes[2].text(0.04, 0.9, labels[2], transform=axes[2].transAxes, fontweight='bold', color='k', fontsize=22,
@@ -105,6 +107,10 @@ def combo_performance(maps, rad_samps, conts, metric_vals, param_name, plot_inds
 
         def func(x, a, b, c):
             return a * np.exp(-b * x) + c
+
+        if param_name in ['R_sig', 'g_sig', r'$d$']:  # 'dark_bright',
+            three_lod_conts = three_lod_conts[::-1]
+            six_lod_conts = six_lod_conts[::-1]
 
         fit = True
         try:
@@ -122,15 +128,13 @@ def combo_performance(maps, rad_samps, conts, metric_vals, param_name, plot_inds
         # axes[2].get_shared_y_axes().join(axes[2], axes[3])
         axes[3].set_yscale('log')
         axes[3].set_xscale('log')
-        axes[3].set_xlabel(r'$P/P_\mathrm{med}$')
+        axes[3].set_xlabel(f'{param_name}/{param_name}'+r'$_\mathrm{med}$')
 
         axes[3].tick_params(direction='in', which='both', right=True, top=True)
 
         if fit:
-            axes[3].plot(metric_multi, func(metric_multi, *popt3),
-                         label=r'$3\lambda/D$: a=%5.3f, b=%5.3f, c=%5.3f' % tuple(popt3), c=colors[0])
-            axes[3].plot(metric_multi, func(metric_multi, *popt6),
-                         label=r'$6\lambda/D$: a=%5.3f, b=%5.3f, c=%5.3f' % tuple(popt6), c=colors[1])
+            axes[3].plot(metric_multi, func(metric_multi, *popt3), label=r'$3\lambda/D$', c=colors[0])  #r'$3\lambda/D$: a=%5.3f, b=%5.3f, c=%5.3f' % tuple(popt3)
+            axes[3].plot(metric_multi, func(metric_multi, *popt6), label=r'$6\lambda/D$', c=colors[1])
         axes[3].errorbar(metric_multi, three_lod_conts, yerr=three_lod_errs, linewidth=0, linestyle=None,
                          marker='o', c=colors[0])
         axes[3].errorbar(metric_multi, six_lod_conts, yerr=six_lod_errs, linewidth=0, linestyle=None, marker='o',
@@ -142,7 +146,7 @@ def combo_performance(maps, rad_samps, conts, metric_vals, param_name, plot_inds
         ax3_top = axes[3].twiny()
         ax3_top.set_xscale('log')
         ax3_top.tick_params(direction='in', which='both', right=True, top=True)
-        ax3_top.set_xlabel(r'$P$')
+        ax3_top.set_xlabel(f'{param_name}')
         if fit: ax3_top.plot(metric_vals, func(metric_multi, *popt3), linewidth=0)
 
         # for ax in [axes[3], ax3_top]:

@@ -11,16 +11,16 @@ params['sp'].cont_save = True
 params['sp'].grid_size = 512
 params['sp'].closed_loop = False
 params['sp'].save_to_disk = True
-params['sp'].memory_limit = 9 /15  # GB
+params['sp'].memory_limit = 9  # GB
 params['sp'].sample_time = 0.5
 
 params['ap'].companion = True
-params['ap'].star_flux = int(1e9)
-params['ap'].contrast = 10**np.array([-3.5, -4, -4.5, -5] * 2)
-params['ap'].companion_xy = [[2.5,0], [0,3], [-3.5,0], [0,-4], [4.5,0], [0,5], [-5.5,0],[0,-6]]
+params['ap'].star_flux = int(1e9/50)
+params['ap'].companion_xy = [[1.5,0], [0,2], [-2.5,0], [0,-3], [3.5,0], [0,4], [-4.5,0], [0,-5], [5.5,0], [0,6], [-6.5,0], [0,-7]]
+params['ap'].contrast = 10**np.array([-3.5, -4, -4.5, -5] * 3)
 params['ap'].n_wvl_init = 8
 params['ap'].n_wvl_final = 16
-params['sp'].numframes = 10
+params['sp'].numframes = 50
 
 params['tp'].prescription = 'general_telescope'
 params['sp'].beam_ratio = 0.25 # 0.3
