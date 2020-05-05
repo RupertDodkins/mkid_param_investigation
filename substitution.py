@@ -59,12 +59,15 @@ def get_form_photons(fields, cam, comps=True, plot=False):
             else:
                 spectralcube = fields[step, :, 0]
 
-            # step_packets = mkids.get_packets(spectralcube, step, dp, mp)
-            # cube = mkids.make_datacube_from_list(step_packets, (nwave,dp.array_size[0],dp.array_size[1]))
             step_packets = cam.get_packets(spectralcube, step)
             cube = cam.make_datacube_from_list(step_packets)
+
+            if cam.max_count:
+                cube = cam.cut_max_count(cube)
+
             cam.stackcube[step] = cube
 
+        # quick2D(np.sum(cam.stackcube[0], axis=0), show=True, title='get form photons step')
         cam.stackcube /= np.sum(cam.stackcube)  # /sp.numframes
         cam.stackcube = np.transpose(cam.stackcube, (1, 0, 2, 3))
 
@@ -72,7 +75,7 @@ def get_form_photons(fields, cam, comps=True, plot=False):
             # plt.figure()
             # plt.hist(cam.stackcube[cam.stackcube != 0].flatten(), bins=np.linspace(0, 1e4, 50))
             # plt.yscale('log')
-            body_spectra(cam.stackcube, show=True, title='get form photons')
+            body_spectra(cam.stackcube[:,0], show=True, title='get form photons')
 
         if cam.usesave:
             cam.save()

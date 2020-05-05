@@ -152,6 +152,17 @@ class g_mean():
         new_cam.QE_map[orig_cam.QE_map == 0] = 0
         return new_cam
 
+class max_count():
+    def __init__(self, master_cam):
+        self.master_cam = master_cam
+        self.median_val = 2000
+        self.multiplier = np.logspace(np.log10(0.1), np.log10(10), 7)
+        self.vals = self.median_val * self.multiplier
+
+    def update_device(self, new_cam, orig_cam, val, i):
+        new_cam.max_count = val
+        return new_cam
+
 def create_cams(metric):
     metric.cams = {'star': [], 'comp': []}
     for obj in metric.cams.keys():
