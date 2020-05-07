@@ -11,7 +11,7 @@ from vip_hci import phot, metrics, pca
 import vip_hci.metrics.contrcurve as contrcurve
 
 from medis.telescope import Telescope
-from medis.MKIDs import Camera
+from medis.MKIDS import Camera
 from medis.utils import dprint
 from medis.plot_tools import quick2D, view_spectra, body_spectra
 
@@ -33,7 +33,7 @@ else:
     # params['sp'].numframes = 10
 
 params['tp'].detector='mkid'
-investigation = f"figure3_{mode}_{params['tp'].detector}"
+investigation = f"mkid_param_invest/figure3_{mode}_{params['tp'].detector}"
 
 class ObservatoryMaster():
     """ Each repeat has new fields to seed from, as well as throughput data on that median array """

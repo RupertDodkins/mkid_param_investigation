@@ -14,7 +14,7 @@ from medis.plot_tools import quick2D, view_spectra
 from medis.utils import dprint
 
 from substitution import get_form_photons, get_ideal_photons
-from medis.MKIDs import Camera
+from medis.MKIDS import Camera
 
 class ideal_placeholder():
     def __init__(self, master_cam):
