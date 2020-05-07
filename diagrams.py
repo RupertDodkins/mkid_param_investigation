@@ -52,6 +52,7 @@ def combo_performance(maps, rad_samps, conts, metric_vals, param_name, plot_inds
     if param_name == 'numframes': param_name = r'$\tau$'
     if param_name == 'dark bright': param_name = r'$d$'
     if param_name == 'pix yield': param_name = r'$Y$'
+    if param_name == 'max count': param_name = r'$m$'
     # fig.suptitle(param_name, x=0.515)
 
     dprint(metric_vals, plot_inds)
