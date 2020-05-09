@@ -11,13 +11,14 @@ from master import params
 params['sp'].numframes = 1
 params['ap'].n_wvl_init = 3
 params['ap'].n_wvl_final = 3
-params['sp'].save_list = np.array(['atmosphere', 'add_aber', 'deformable mirror', 'add_aber', 'pre_coron', 'detector'])
+params['sp'].save_list = np.array(['atmosphere', 'CPA', 'deformable mirror', 'NCPA', 'pre_coron', 'detector'])
 save_labels = np.array(['Entrance Pupil', 'After CPA', 'After DM', 'After NCPA', 'Before Occult.', 'Detector'])
 params['ap'].companion = False
+params['sp'].save_to_disk = True
 
 if __name__ == '__main__':  # required for multiprocessing - make sure globals are set before though
 
-    sim = mm.RunMedis(params=params, name='figure1_3', product='fields')
+    sim = mm.RunMedis(params=params, name='mkid_param_invest/figure1', product='fields')
     observation = sim()
     cpx_sequence = observation['fields']
 
