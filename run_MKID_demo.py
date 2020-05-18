@@ -207,7 +207,7 @@ if __name__ == '__main__':  # required for multiprocessing - make sure globals a
 
     cam.photons = np.empty((0, 4))
     dprint(len(fields))
-    cam.stackcube = np.zeros((params['sp'].numframes, params['ap'].n_wvl_final, params['mp'].array_size[1], params['mp'].array_size[0]))
+    cam.rebinned_cube = np.zeros((params['sp'].numframes, params['ap'].n_wvl_final, params['mp'].array_size[1], params['mp'].array_size[0]))
     for step in range(len(fields)):
         dprint(step, fields.shape)
         spectralcubes = np.abs(fields[step, -1, :, :]) ** 2
@@ -219,7 +219,7 @@ if __name__ == '__main__':  # required for multiprocessing - make sure globals a
 
         cube = cam.make_datacube_from_list(step_packets)
 
-        cam.stackcube[step] = cube
+        cam.rebinned_cube[step] = cube
 
         cam.photons = np.vstack((cam.photons, step_packets))
 
@@ -231,7 +231,7 @@ if __name__ == '__main__':  # required for multiprocessing - make sure globals a
 
     ax6 = fig.add_subplot(236)
 
-    # grid(cam.stackcube)
+    # grid(cam.rebinned_cube)
 
     xc, yc = 106, 75
     x = np.arange(xc-2,xc+2)

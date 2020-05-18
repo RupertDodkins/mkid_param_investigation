@@ -2,12 +2,13 @@ import os
 import numpy as np
 import pickle
 import matplotlib.pyplot as plt
-from medis.plot_tools import quick2D, view_spectra, body_spectra
+from medis.plot_tools import quick2D, view_spectra, grid
+from medis.utils import dprint
 
 def get_ideal_photons(fields, cam, comps=True, plot=False):
     ntime, nwave = fields.shape[0], fields.shape[1]
 
-    cam.stackcube = np.zeros((ntime, nwave, cam.array_size[1], cam.array_size[0]))
+    cam.rebinned_cube = np.zeros((ntime, nwave, cam.array_size[1], cam.array_size[0]))
     for step in range(len(fields)):
         print(step)
         if comps:
@@ -16,16 +17,16 @@ def get_ideal_photons(fields, cam, comps=True, plot=False):
             spectralcube = fields[step, :, 0]
 
         cube = cam.get_ideal_cube(spectralcube)
-        cam.stackcube[step] = cube
+        cam.rebinned_cube[step] = cube
 
-    cam.stackcube /= np.sum(cam.stackcube)  # /sp.numframes
-    cam.stackcube = np.transpose(cam.stackcube, (1, 0, 2, 3))
+    cam.rebinned_cube /= np.sum(cam.rebinned_cube)  # /sp.numframes
+    cam.rebinned_cube = np.transpose(cam.rebinned_cube, (1, 0, 2, 3))
 
     if plot:
         # plt.figure()
-        # plt.hist(cam.stackcube[cam.stackcube != 0].flatten(), bins=np.linspace(0, 1e4, 50))
+        # plt.hist(cam.rebinned_cube[cam.rebinned_cube != 0].flatten(), bins=np.linspace(0, 1e4, 50))
         # plt.yscale('log')
-        body_spectra(cam.stackcube, show=True, title='get ideal photons', nstd=6)
+        grid(cam.rebinned_cube, show=True, title='get ideal photons', nstd=6)
 
     if cam.usesave:
         cam.save()
@@ -45,39 +46,35 @@ def get_form_photons(fields, cam, comps=True, plot=False):
     """
 
     if os.path.exists(cam.name):
-        print(f'loading cam stackcube save at {cam.name}')
+        print(f'loading cam rebined_cube save at {cam.name}')
         with open(cam.name, 'rb') as handle:
             cam = pickle.load(handle)
     else:
-        ntime, nwave = fields.shape[0], fields.shape[1]
+        if comps:
+            fourcube = np.sum(fields, axis=2)
+        else:
+            fourcube = fields[:, :, 0]
 
-        cam.stackcube = np.zeros((ntime, nwave, cam.array_size[1], cam.array_size[0]))
+        fourcube = np.abs(fourcube) ** 2
+        dprint(np.sum(fourcube))
+        fourcube = cam.rescale_cube(fourcube)
+
+        photons = cam.get_photons(fourcube)
+        photons = cam.degrade_photons(photons)
+        cam.rebinned_cube = cam.rebin_list(photons)
+
         for step in range(len(fields)):
             print(step)
-            if comps:
-                spectralcube = np.sum(fields[step], axis=1)
-            else:
-                spectralcube = fields[step, :, 0]
-
-            step_packets = cam.get_packets(spectralcube, step)
-            cube = cam.make_datacube_from_list(step_packets)
-
             if cam.max_count:
-                cube = cam.cut_max_count(cube)
+                cam.rebinned_cube[step] = cam.cut_max_count(cam.rebinned_cube[step])
 
-            cam.stackcube[step] = cube
-
-        # quick2D(np.sum(cam.stackcube[0], axis=0), show=True, title='get form photons step')
-        cam.stackcube /= np.sum(cam.stackcube)  # /sp.numframes
-        cam.stackcube = np.transpose(cam.stackcube, (1, 0, 2, 3))
+        cam.rebinned_cube /= np.sum(cam.rebinned_cube)  # /sp.numframes
+        cam.rebinned_cube = np.transpose(cam.rebinned_cube, (1, 0, 2, 3))
 
         if plot:
-            # plt.figure()
-            # plt.hist(cam.stackcube[cam.stackcube != 0].flatten(), bins=np.linspace(0, 1e4, 50))
-            # plt.yscale('log')
-            body_spectra(cam.stackcube[:,0], show=True, title='get form photons')
+            grid(cam.rebinned_cube, show=True, title='get form photons')
 
         if cam.usesave:
-            cam.save()
+            cam.save_instance()
 
     return cam

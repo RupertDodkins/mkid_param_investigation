@@ -15,12 +15,12 @@ from master import params
 def debugging_noise(metric_test):
     """ debugging the throughput issue by first looking at the input noise """
     comp = 'star'
-    metric_test.get_stackcubes(metric_test.master_fields, comps=comp != 'star')
+    metric_test.get_rebinned_cubes(metric_test.master_fields, comps=comp != 'star')
     nmetric = len(metric_test.metric.cams[comp])
     mid_ind = int((nmetric - 1) / 2)
     dprint(mid_ind)
     cam = metric_test.metric.cams['comp'][mid_ind]  # middle ind assuming
-    wavemet_cube = [metric_test.metric.cams[comp][i].stackcube[:, 0] for i in range(len(metric_test.metric.vals))]
+    wavemet_cube = [metric_test.metric.cams[comp][i].rebinned_cube[:, 0] for i in range(len(metric_test.metric.vals))]
     # body_spectra(wavemet_cube)
     median_fwhm = cam.lod
     mask = cam.QE_map == 0
@@ -77,7 +77,7 @@ def debugging_throughput(metric_test):
     #         throughput_smooth, flux_in, flux_out = pickle.load(handle)
     #
     # else:
-    metric_test.get_stackcubes(metric_test.master_fields, comps=comp != 'star')
+    metric_test.get_rebinned_cubes(metric_test.master_fields, comps=comp != 'star')
     wsamples = np.linspace(metric_test.wvl_range[0], metric_test.wvl_range[1], metric_test.n_wvl_final)
     scale_list = wsamples / (metric_test.wvl_range[1] - metric_test.wvl_range[0])
 
@@ -101,8 +101,8 @@ def debugging_throughput(metric_test):
                 fwhm = metric_test.lod
                 dprint(fwhm)
 
-            fulloutput = contrast_curve(cube=cam.stackcube, interp_order=2,
-                                        angle_list=np.zeros((cam.stackcube.shape[1])),
+            fulloutput = contrast_curve(cube=cam.rebinned_cube, interp_order=2,
+                                        angle_list=np.zeros((cam.rebinned_cube.shape[1])),
                                         psf_template=psf_template, fwhm=fwhm, pxscale=cam.platescale / 1000,
                                         starphot=star_phot, algo=pca.pca, nbranch=1, adimsdi='double', ncomp=7,
                                         ncomp2=None, debug=False, plot=False, theta=0, fc_snr=fc_snr, full_output=True,

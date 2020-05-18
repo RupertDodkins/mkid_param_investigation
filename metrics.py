@@ -1,7 +1,7 @@
 """
 
 Module hosting the MetricConfig Class to created adapted mkids.Camera objects and run tailored
-get_stackcubes and pca_stackcubes
+get_rebinned_cubes and pca_rebinned_cubes
 
 """
 
@@ -13,6 +13,7 @@ import random
 from medis.plot_tools import quick2D, view_spectra
 from medis.utils import dprint
 
+from master import ap, sp, tp, iop, atmp, cdip, mp
 from substitution import get_form_photons, get_ideal_photons
 from medis.MKIDS import Camera
 
@@ -34,10 +35,10 @@ class numframes():
         self.vals = np.int_(np.round(median_val * self.multiplier))
 
     def update_device(self, new_cam, orig_cam, val, i):
-        # new_cam.stackcube = None
+        # new_cam.rebinned_cube = None
         return new_cam
 
-    def get_stackcubes(self, master_fields, comps=True):
+    def get_rebinned_cubes(self, master_fields, comps=True):
         obj = 'comp' if comps else 'star'
         for i, cam, metric_val in zip(range(len(self.cams[obj])), self.cams[obj], self.vals):
             reduced_fields = master_fields[:metric_val]
@@ -70,10 +71,13 @@ class pix_yield():
     def __init__(self, master_cam):
         self.master_cam = master_cam
         median_val = 0.8
-        self.multiplier = np.linspace(0.5,1.25,4)
-        self.vals = median_val * self.multiplier
-        self.vals[self.vals>1] = 1
-        self.params = master_cam.params
+        # self.multiplier = np.linspace(0.5,1.25,4)
+        # self.vals = median_val * self.multiplier
+        # self.vals[self.vals>1] = 1
+        self.vals = np.array([0.75,0.85,0.95,0.99])
+        self.multiplier = self.vals/median_val
+
+        # self.params = master_cam.params
         self.bad_inds = self.get_bad_inds(self.vals)
 
     def update_device(self, new_cam, orig_cam, val, i):
@@ -86,8 +90,8 @@ class pix_yield():
         pix_yields = np.array(pix_yields)
         min_yield = min(pix_yields)
         max_yield = max(pix_yields)
-        amount = int(self.params['mp'].array_size[0] * self.params['mp'].array_size[1] * (1. - min_yield))
-        all_bad_inds = random.sample(list(range(self.params['mp'].array_size[0] * self.params['mp'].array_size[1])), amount)
+        amount = int(mp.array_size[0] * mp.array_size[1] * (1. - min_yield))
+        all_bad_inds = random.sample(list(range(mp.array_size[0] * mp.array_size[1])), amount)
         # dprint(len(all_bad_inds))
         bad_inds_inds = np.int_((1 - (pix_yields - min_yield) / (max_yield - min_yield)) * amount)
         bad_inds = []
@@ -100,8 +104,8 @@ class pix_yield():
         dprint(len(bad_ind))
         QE_map = np.array(QE_map_all, copy=True)
         if len(bad_ind) > 0:
-            bad_y = np.int_(np.floor(bad_ind / self.params['mp'].array_size[1]))
-            bad_x = bad_ind % self.params['mp'].array_size[1]
+            bad_y = np.int_(np.floor(bad_ind / mp.array_size[1]))
+            bad_x = bad_ind % mp.array_size[1]
             QE_map[bad_x, bad_y] = 0
 
         return QE_map
@@ -168,7 +172,7 @@ def create_cams(metric):
     for obj in metric.cams.keys():
         for i, val in enumerate(metric.vals):
             new_cam = copy.deepcopy(metric.master_cam)
-            new_cam.stackcube = None
+            new_cam.rebinned_cube = None
             new_cam = metric.update_device(new_cam, metric.master_cam, val, i)
             new_cam.name = os.path.join(metric.testdir, f"camera_val={val}_comp={obj=='comp'}.pkl")
             metric.cams[obj].append(new_cam)
@@ -184,7 +188,7 @@ def get_metric(name, master_cam):
     :return:
     """
 
-    testdir = os.path.join(os.path.dirname(master_cam.params['iop'].testdir), name)
+    testdir = os.path.join(os.path.dirname(iop.testdir), name)
     MetricConfig = eval(name)
     metric_config = MetricConfig(master_cam)
     metric_config.testdir = testdir
