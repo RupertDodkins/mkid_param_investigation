@@ -4,7 +4,7 @@ from medis.params import sp, ap, tp, iop, mp, atmp, cdip
 sp.show_wframe = False
 sp.save_obs = False
 sp.show_cube = False
-sp.num_processes = 1
+sp.num_processes = 5
 sp.save_fields = False
 sp.save_ints = True
 sp.cont_save = True
@@ -73,5 +73,17 @@ mp.remove_close = False
 mp.quantize_FCs = False #True
 mp.wavecal_coeffs = [1.e9 / 6, -250]
 
-
+from os.path import expanduser
+home = expanduser("~")
+if home == '/Users/dodkins':
+    iop.update_datadir('/Users/dodkins/MEDIS_photonlists/')
+    sp.num_processes = 1
+    sp.numframes = 5  # 2000 #500
+elif home == '/home/dodkins':
+    # os.environ["DISPLAY"] = "/home/dodkins"
+    iop.update_datadir('/mnt/data0/dodkins/MEDIS_photonlists/')
+    sp.num_processes = 5
+    sp.numframes = 10  # 2000 #500
+else:
+    print('System not recognised. Make sure $WORKING_DIR is set')
 
