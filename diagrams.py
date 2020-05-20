@@ -41,7 +41,8 @@ def combo_performance(maps, rad_samps, conts, metric_vals, param_name, plot_inds
     letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i']
     labels = ['i', 'ii', 'iii', 'iv', 'v']
     title = r'  $I / I^{*}$'
-    vmin = -1e-8
+    # vmin = -1e-8
+    vmin = 0
     vmax = 1e-6
 
     fig, axes = plt.subplots(nrows=1, ncols=4, figsize=(14, 3.4))
@@ -81,7 +82,8 @@ def combo_performance(maps, rad_samps, conts, metric_vals, param_name, plot_inds
     cax.yaxis.set_ticks_position("left")
     cb.ax.set_title(title, fontsize=16)  #
     # cbar_ticks = np.logspace(np.log10(vmin), np.log10(vmax), num=5, endpoint=True)
-    cbar_ticks = [-1e-8, 0, 1e-8, 1e-7, 1e-6]
+    # cbar_ticks = [-1e-8, 0, 1e-8, 1e-7, 1e-6]
+    cbar_ticks = [0, 1e-8, 1e-7, 1e-6]
     cb.set_ticks(cbar_ticks)
 
     for f, (rad_samp, cont) in enumerate(zip(rad_samps, conts)):
