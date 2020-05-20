@@ -309,12 +309,12 @@ class MetricTester():
             mask = cams['star'][i].QE_map == 0
 
             print('check whether to be using mask here?!')
-            noise_samp, rad_samp = contrcurve.noise_per_annulus(frame_nocomp, separation=1, fwhm=median_fwhm,
-                                                                mask=mask)
+            noise_samp, rad_samp = contrcurve.noise_per_annulus(frame_nocomp, separation=1, fwhm=median_fwhm)
+                                                                # mask=mask)
 
             xy = np.array(ap.companion_xy) * 20 * cams['star'][i].sampling / cams['star'][i].platescale
-            px, py = (cams['star'][i].array_size/2 - xy).T
-            cx, cy = cams['star'][i].array_size/2
+            px, py = (cams['star'][i].array_size[::-1]/2 - xy).T
+            cx, cy = cams['star'][i].array_size[::-1]/2
             dists = np.sqrt((py-cy)**2 + (px-cx)**2)
             # grid(np.sum(comp_cube, axis=1), title='in comp time collapse', show=False)
             # injected_flux=[contrcurve.aperture_flux(np.sum(comp_cube-nocomp_cube, axis=1)[i], py, px, fwhm[i]/1.5, ap_factor=1) for i in range(comp_cube.shape[0])]
@@ -380,7 +380,7 @@ class MetricTester():
             print(thruput, thruput_interp)
             axes[0].plot(rad_samp, thruput_interp, c=colors[i])
 
-            starphot = 1.1
+            starphot = 1.1/2
             sigma = 5
             cont_curve_samp = ((sigma * noise_samp_sm) / thruput_interp) / starphot
             cont_curve_samp[cont_curve_samp < 0] = 1
@@ -481,6 +481,122 @@ def parse_cont_data(all_cont_data, p):
         err_conts = [np.std(all_conts[:,i])/np.sqrt(len(all_conts)) for i in range(len(all_conts[0]))]  #can't do std if one axis is different size (unlike mean)
 
     return rad_samps, mean_conts, err_conts
+
+from vip_hci.var import frame_center, dist
+import photutils
+
+def noise_per_annulus(array, separation, fwhm, init_rad=None, wedge=(0, 360),
+                      verbose=False, debug=False, mask=None):
+    """ Measures the noise as the standard deviation of apertures defined in
+    each annulus with a given separation.
+
+    Parameters
+    ----------
+    array : array_like
+        Input frame.
+    separation : float
+        Separation in pixels of the centers of the annuli measured from the
+        center of the frame.
+    fwhm : float
+        FWHM in pixels.
+    init_rad : float
+        Initial radial distance to be used. If None then the init_rad = FWHM.
+    wedge : tuple of floats, optional
+        Initial and Final angles for using a wedge. For example (-90,90) only
+        considers the right side of an image. Be careful when using small
+        wedges, this leads to computing a standard deviation of very small
+        samples (<10 values).
+    verbose : bool, optional
+        If True prints information.
+    debug : bool, optional
+        If True plots the positioning of the apertures.
+
+    Returns
+    -------
+    noise : array_like
+        Vector with the noise value per annulus.
+    vector_radd : array_like
+        Vector with the radial distances values.
+
+    """
+    # dprint(fwhm)
+    def find_coords(rad, sep, init_angle, fin_angle):
+        angular_range = fin_angle-init_angle
+        npoints = (np.deg2rad(angular_range)*rad)/sep   #(2*np.pi*rad)/sep
+        ang_step = angular_range/npoints   #360/npoints
+        x = []
+        y = []
+        for i in range(int(npoints)):
+            newx = rad * np.cos(np.deg2rad(ang_step * i + init_angle))
+            newy = rad * np.sin(np.deg2rad(ang_step * i + init_angle))
+            x.append(newx)
+            y.append(newy)
+        return np.array(y), np.array(x)
+    ###
+
+    if array.ndim != 2:
+        raise TypeError('Input array is not a frame or 2d array')
+    if not isinstance(wedge, tuple):
+        raise TypeError('Wedge must be a tuple with the initial and final '
+                        'angles')
+
+    init_angle, fin_angle = wedge
+    centery, centerx = frame_center(array)
+    n_annuli = int(np.floor((centery)/separation)) - 1
+    noise = []
+    vector_radd = []
+    if verbose:
+        print('{} annuli'.format(n_annuli))
+
+    if init_rad is None:
+        init_rad = fwhm
+
+    if debug:
+        _, ax = plt.subplots(figsize=(6, 6))
+        ax.imshow(array, origin='lower', interpolation='nearest',
+                  alpha=0.5, cmap='gray')
+
+    for i in range(n_annuli):
+        y = centery + init_rad + separation * i
+        rad = dist(centery, centerx, y, centerx)
+        yy, xx = find_coords(rad, fwhm, init_angle, fin_angle)
+        yy += centery
+        xx += centerx
+
+        apertures = photutils.CircularAperture((xx, yy), fwhm/2)
+        mask=np.bool_(mask)
+        # quick2D(mask)
+        if mask:
+            fluxes = photutils.aperture_photometry(array, apertures, mask=mask)
+        else:
+            fluxes = photutils.aperture_photometry(array, apertures)
+        fluxes = np.array(fluxes['aperture_sum'])
+
+        noise_ann = np.std(fluxes)
+        noise.append(noise_ann)
+        vector_radd.append(rad)
+        # if debug:
+        #     if i == 1:
+        #         plt.plot(fluxes)
+
+        # plt.figure()
+        # plt.hist(fluxes, bins=50)
+
+        if debug:
+            for j in range(xx.shape[0]):
+                # Circle takes coordinates as (X,Y)
+                aper = plt.Circle((xx[j], yy[j]), radius=fwhm/2, color='r',
+                                  fill=False, alpha=0.8)
+                ax.add_patch(aper)
+                cent = plt.Circle((xx[j], yy[j]), radius=0.8, color='r',
+                                  fill=True, alpha=0.5)
+                ax.add_patch(cent)
+
+        if verbose:
+            print('Radius(px) = {}, Noise = {:.3f} '.format(rad, noise_ann))
+
+
+    return np.array(noise), np.array(vector_radd)
 
 if __name__ == '__main__':
 
