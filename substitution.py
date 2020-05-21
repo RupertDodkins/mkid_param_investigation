@@ -1,7 +1,9 @@
 import os
 import numpy as np
 import pickle
+import copy
 import matplotlib.pyplot as plt
+
 from medis.plot_tools import quick2D, view_spectra, grid
 from medis.utils import dprint
 
@@ -78,3 +80,18 @@ def get_form_photons(fields, cam, comps=True, plot=False):
             cam.save_instance()
 
     return cam
+
+def save_params(param_list):
+    """
+
+    :param param_list: [ap, sp, tp, iop, atmp, cdip, mp] or less
+    :return:
+    """
+    print(f'storing params for {[param.__name__() for param in param_list]}')
+    save_state = [copy.deepcopy(param) for param in param_list]
+    return save_state
+
+def restore_params(save_state, params):
+    """"""
+    for i, param in enumerate(params):
+        param.__dict__ = save_state[i].__dict__

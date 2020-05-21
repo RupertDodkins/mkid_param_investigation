@@ -14,7 +14,7 @@ from medis.plot_tools import quick2D, view_spectra
 from medis.utils import dprint
 
 from master import ap, sp, tp, iop, atmp, cdip, mp
-from substitution import get_form_photons, get_ideal_photons
+from substitution import get_form_photons, get_ideal_photons, save_params, restore_params
 from medis.MKIDS import Camera
 
 class ideal_placeholder():
@@ -50,20 +50,21 @@ class numframes():
 class array_size():
     def __init__(self, master_cam):
         self.master_cam = master_cam
-        self.params = self.master_cam.params
-        self.median_val = self.params['mp'].array_size[0]
+        self.median_val = mp.array_size[0]
         self.multiplier = np.logspace(np.log10(0.25), np.log10(4), 7)
         self.vals = np.int_(np.round(self.median_val * np.sqrt(self.multiplier)))
 
     def update_device(self, new_cam, orig_cam, val, i):
-        params = copy.deepcopy(self.params)
-        params['mp'].array_size = np.array([val] * 2)
-        new_cam = Camera(params, usesave=False, fields=False)  # these two args mean no fields will be produced
+        params = [mp]
+        save_state = save_params(params)
+        mp.array_size = np.array([val] * 2)
+        new_cam = Camera(usesave=False, fields=False)  # these two args mean no fields will be produced
         new_cam.usesave = orig_cam.usesave  # new cam will have usesave False so set it here to what you actually want
-        new_cam.lod = (val / self.median_val) * params['mp'].lod
+        new_cam.lod = (val / self.median_val) * mp.lod
         dprint(val, self.median_val, new_cam.lod)
-        new_cam.platescale = params['mp'].platescale * self.median_val / val
+        new_cam.platescale = mp.platescale * self.median_val / val
         new_cam.array_size = np.array([val, val])
+        restore_params(save_state, params)
         # new_cam.name = os.path.join(self.testdir, f'camera_{self.name}={val}_comp={obj}.pkl')
         return new_cam
 
@@ -131,7 +132,7 @@ class dark_bright():
 class R_mean():
     def __init__(self, master_cam):
         self.master_cam = master_cam
-        self.median_val = master_cam.params['mp'].R_mean
+        self.median_val = mp.R_mean
         self.multiplier = np.logspace(np.log10(0.1), np.log10(10), 7)
         self.vals = np.int_(np.round(self.median_val * self.multiplier))
 
@@ -145,9 +146,9 @@ class R_mean():
 class g_mean():
     def __init__(self, master_cam):
         self.master_cam = master_cam
-        self.params = self.master_cam.params
-        self.median_val = self.params['mp'].g_mean
-        self.multiplier = np.logspace(np.log10(0.5), np.log10(7/3), 7)
+        self.median_val = mp.g_mean
+        # self.multiplier = np.logspace(np.log10(0.5), np.log10(7/3), 7)
+        self.multiplier = np.logspace(np.log10(1./3), np.log10(3), 3)
         self.vals = self.median_val * self.multiplier
 
     def update_device(self, new_cam, orig_cam, val, i):
