@@ -27,15 +27,17 @@ class ideal_placeholder():
         return new_cam
 
 class numframes():
-    def __init__(self, master_cam):
+    def __init__(self, master_cam, num_samp=3):
         self.master_cam = master_cam
-        median_val = 10
-        self.multiplier = np.logspace(np.log10(0.2), np.log10(5), 7)
+        self.median_val = 10
+        self.multiplier = np.logspace(np.log10(0.2), np.log10(5), num_samp)
+        # self.multiplier = np.array([0.2,0.5,1])
         # self.multiplier = np.logspace(np.log10(0.2), np.log10(5), 2)
-        self.vals = np.int_(np.round(median_val * self.multiplier))
+        self.vals = np.int_(np.round(self.median_val * self.multiplier))
 
     def update_device(self, new_cam, orig_cam, val, i):
         # new_cam.rebinned_cube = None
+        new_cam.numframes = val
         return new_cam
 
     def get_rebinned_cubes(self, master_fields, comps=True):
@@ -48,17 +50,17 @@ class numframes():
             self.cams[obj][i] = cam
 
 class array_size():
-    def __init__(self, master_cam):
+    def __init__(self, master_cam, num_samp=3):
         self.master_cam = master_cam
         self.median_val = mp.array_size[0]
-        self.multiplier = np.logspace(np.log10(0.25), np.log10(4), 7)
+        self.multiplier = np.logspace(np.log10(0.25), np.log10(4), num_samp)
         self.vals = np.int_(np.round(self.median_val * np.sqrt(self.multiplier)))
 
     def update_device(self, new_cam, orig_cam, val, i):
         params = [mp]
         save_state = save_params(params)
         mp.array_size = np.array([val] * 2)
-        new_cam = Camera(usesave=False, fields=False)  # these two args mean no fields will be produced
+        new_cam = Camera(usesave=False)  # these two args mean no fields will be produced
         new_cam.usesave = orig_cam.usesave  # new cam will have usesave False so set it here to what you actually want
         new_cam.lod = (val / self.median_val) * mp.lod
         dprint(val, self.median_val, new_cam.lod)
@@ -69,14 +71,18 @@ class array_size():
         return new_cam
 
 class pix_yield():
-    def __init__(self, master_cam):
+    def __init__(self, master_cam, num_samp=3):
         self.master_cam = master_cam
-        median_val = 0.8
         # self.multiplier = np.linspace(0.5,1.25,4)
         # self.vals = median_val * self.multiplier
         # self.vals[self.vals>1] = 1
-        self.vals = np.array([0.75,0.85,0.95,0.99])
-        self.multiplier = self.vals/median_val
+
+        # self.median_val = 0.85
+        # self.vals = np.array([0.75,0.85,0.95,0.99])
+
+        self.median_val = 0.8
+        self.multiplier = np.logspace(np.log10(4/5), np.log10(5/4), num_samp)
+        self.vals = np.around(self.multiplier * self.median_val, 2)
 
         # self.params = master_cam.params
         self.bad_inds = self.get_bad_inds(self.vals)
@@ -130,10 +136,10 @@ class dark_bright():
         return new_cam
 
 class R_mean():
-    def __init__(self, master_cam):
+    def __init__(self, master_cam, num_samp=3):
         self.master_cam = master_cam
         self.median_val = mp.R_mean
-        self.multiplier = np.logspace(np.log10(0.1), np.log10(10), 7)
+        self.multiplier = np.logspace(np.log10(0.1), np.log10(10), num_samp)
         self.vals = np.int_(np.round(self.median_val * self.multiplier))
 
     def update_device(self, new_cam, orig_cam, val, i):
@@ -144,12 +150,12 @@ class R_mean():
         return new_cam
 
 class g_mean():
-    def __init__(self, master_cam):
+    def __init__(self, master_cam, num_samp=3):
         self.master_cam = master_cam
         self.median_val = mp.g_mean
         # self.multiplier = np.logspace(np.log10(0.5), np.log10(7/3), 7)
-        self.multiplier = np.logspace(np.log10(1./3), np.log10(3), 3)
-        self.vals = self.median_val * self.multiplier
+        self.multiplier = np.logspace(np.log10(1./3), np.log10(3), num_samp)
+        self.vals = np.around(self.median_val * self.multiplier, 2)
 
     def update_device(self, new_cam, orig_cam, val, i):
         new_cam.QE_map = orig_cam.QE_map - self.median_val + val
@@ -158,11 +164,12 @@ class g_mean():
         return new_cam
 
 class max_count():
-    def __init__(self, master_cam):
+    def __init__(self, master_cam, num_samp=3):
         self.master_cam = master_cam
         self.median_val = 2000
-        self.multiplier = np.logspace(np.log10(0.1), np.log10(10), 7)
-        self.vals = self.median_val * self.multiplier
+        self.multiplier = np.logspace(np.log10(0.1), np.log10(10), num_samp)
+        # self.multiplier = np.array([0.05,1,10])
+        self.vals = np.int_(np.round(self.median_val * self.multiplier))
 
     def update_device(self, new_cam, orig_cam, val, i):
         new_cam.max_count = val
@@ -178,7 +185,7 @@ def create_cams(metric):
             new_cam.name = os.path.join(metric.testdir, f"camera_val={val}_comp={obj=='comp'}.pkl")
             metric.cams[obj].append(new_cam)
 
-def get_metric(name, master_cam):
+def get_metric(name, master_cam, num_samp):
     """
     wrapper for each metric class that automates the common steps among metrics
 
@@ -191,7 +198,7 @@ def get_metric(name, master_cam):
 
     testdir = os.path.join(os.path.dirname(iop.testdir), name)
     MetricConfig = eval(name)
-    metric_config = MetricConfig(master_cam)
+    metric_config = MetricConfig(master_cam, num_samp)
     metric_config.testdir = testdir
     metric_config.name = name
     create_cams(metric_config)

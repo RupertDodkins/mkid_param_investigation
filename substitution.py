@@ -35,7 +35,7 @@ def get_ideal_photons(fields, cam, comps=True, plot=False):
 
     return cam
 
-def get_form_photons(fields, cam, comps=True, plot=False):
+def get_form_photons(fields, cam, comps=True, plot=False, collapse_time_first=False, norm=False):
     """
     Alternative to cam.__call__ that allows the user to specify whether the spectracube contains the planets
 
@@ -46,7 +46,7 @@ def get_form_photons(fields, cam, comps=True, plot=False):
     :return:
     mkids.Camera()
     """
-
+    dprint(cam.name)
     if os.path.exists(cam.name):
         print(f'loading cam rebined_cube save at {cam.name}')
         with open(cam.name, 'rb') as handle:
@@ -61,16 +61,34 @@ def get_form_photons(fields, cam, comps=True, plot=False):
         dprint(np.sum(fourcube))
         fourcube = cam.rescale_cube(fourcube)
 
-        photons = cam.get_photons(fourcube)
-        photons = cam.degrade_photons(photons)
-        cam.rebinned_cube = cam.rebin_list(photons)
+        max_steps = cam.max_chunk(fourcube)
+        num_chunks = int(np.ceil(len(fourcube) / max_steps))
+        dprint(fourcube.shape, max_steps, len(fourcube) / max_steps, num_chunks)
+        # cam.photons = np.empty((4,0))
+        cam.rebinned_cube = np.zeros_like(fourcube)
+        for chunk in range(num_chunks):
+            photons = cam.get_photons(fourcube[chunk*max_steps:(chunk+1)*max_steps], chunk_step=chunk*max_steps)
+            photons = cam.degrade_photons(photons)
+            # cam.photons = np.hstack((cam.photons, photons))
+            # dprint(photons.shape, cam.photons.shape)
+            cam.rebinned_cube[chunk*max_steps:(chunk+1)*max_steps] = cam.rebin_list(photons, time_inds=[chunk*max_steps,(chunk+1)*max_steps])
+        # cam.rebinned_cube = cam.rebin_list(cam.photons)
+
+        cam.photons = None
 
         for step in range(len(fields)):
-            print(step)
+            print(step, cam.max_count)
             if cam.max_count:
                 cam.rebinned_cube[step] = cam.cut_max_count(cam.rebinned_cube[step])
 
-        cam.rebinned_cube /= np.sum(cam.rebinned_cube)  # /sp.numframes
+        if norm:
+            cam.rebinned_cube /= np.sum(cam.rebinned_cube)  # /sp.numframes
+
+        if collapse_time_first:
+            grid(cam.rebinned_cube, title='comp sum', show=False, logZ=True)
+            cam.rebinned_cube = np.median(cam.rebinned_cube, axis=0)[np.newaxis]
+            grid(cam.rebinned_cube, title='comp sum', show=False, logZ=True)
+
         cam.rebinned_cube = np.transpose(cam.rebinned_cube, (1, 0, 2, 3))
 
         if plot:

@@ -38,7 +38,7 @@ tp.piston_error = False
 ap.wvl_range = np.array([800, 1500]) /1e9
 tp.rot_rate = 0  # deg/s
 tp.pix_shift = [[0, 0]]
-tp.satelite_speck['apply'] = True
+tp.satelite_speck = {'apply': True, 'phase': np.pi / 5., 'amp': 12e-9, 'xloc': 12, 'yloc': 12}
 tp.legs_frac = 0.03
 tp.f_lens = 200.0 * tp.entrance_d
 tp.use_coronagraph = True
@@ -76,9 +76,9 @@ mp.wavecal_coeffs = [1.e9 / 6, -250]
 from os.path import expanduser
 home = expanduser("~")
 if home == '/Users/dodkins':
-    iop.update_datadir('/Users/dodkins/MEDIS_photonlists/')
+    iop.update_datadir('/Users/dodkins/MKIDSim/')
     sp.num_processes = 1
-    sp.numframes = 5  # 2000 #500
+    sp.numframes = 50  # 2000 #500
 elif home == '/home/dodkins':
     # os.environ["DISPLAY"] = "/home/dodkins"
     iop.update_datadir('/mnt/data0/dodkins/MEDIS_photonlists/')

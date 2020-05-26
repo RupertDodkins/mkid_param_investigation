@@ -26,7 +26,7 @@ def contrcurve_plot(metric_vals, rad_samps, thruputs, noises, conts):
         axes[2].plot(rad_samp, cont)
     for ax in axes:
         ax.set_yscale('log')
-        ax.set_xlabel('Radial Separation')
+        ax.set_xlabel('Radial Separation (mas)')
         ax.tick_params(direction='in', which='both', right=True, top=True)
     axes[0].set_ylabel('Throughput')
     axes[1].set_ylabel('Noise')
@@ -42,9 +42,10 @@ def combo_performance(maps, rad_samps, conts, metric_vals, param_name, plot_inds
     labels = ['i', 'ii', 'iii', 'iv', 'v']
     title = r'  $I / I^{*}$'
     # vmin = -1e-8
-    vmin = 0
-    vmax = 1e-6
-
+    # vmin = 0.001
+    # # vmax = 1e-6
+    # vmax = 10
+    vmin, vmax = 1e-8, 1e-4
     fig, axes = plt.subplots(nrows=1, ncols=4, figsize=(14, 3.4))
     param_name = param_name.replace('_', ' ')
     if param_name == 'R mean': param_name = r'$R$'
@@ -83,7 +84,8 @@ def combo_performance(maps, rad_samps, conts, metric_vals, param_name, plot_inds
     cb.ax.set_title(title, fontsize=16)  #
     # cbar_ticks = np.logspace(np.log10(vmin), np.log10(vmax), num=5, endpoint=True)
     # cbar_ticks = [-1e-8, 0, 1e-8, 1e-7, 1e-6]
-    cbar_ticks = [0, 1e-8, 1e-7, 1e-6]
+    # cbar_ticks = [0, 1e-8, 1e-7, 1e-6]
+    cbar_ticks = np.logspace(np.log10(1e-8), np.log10(1e-4), 5)
     cb.set_ticks(cbar_ticks)
 
     for f, (rad_samp, cont) in enumerate(zip(rad_samps, conts)):
@@ -93,7 +95,7 @@ def combo_performance(maps, rad_samps, conts, metric_vals, param_name, plot_inds
             axes[2].plot(rad_samp, cont, label='%5.2f' % metric_vals[f])
 
     axes[2].set_yscale('log')
-    axes[2].set_xlabel('Radial Separation')
+    axes[2].set_xlabel('Radial Separation (")')
     axes[2].tick_params(direction='in', which='both', right=True, top=True)
     axes[2].set_ylabel('5$\sigma$ Contrast')
     planet_seps = np.arange(1.5, 7.5, 0.5) * 0.1
@@ -121,15 +123,14 @@ def combo_performance(maps, rad_samps, conts, metric_vals, param_name, plot_inds
                 popt3, pcov3 = curve_fit(func, metric_multi, three_lod_conts)
                 popt6, pcov6 = curve_fit(func, metric_multi, six_lod_conts)
             else:
-                popt3, pcov3 = curve_fit(func, metric_multi, three_lod_conts, sigma=three_lod_errs)
-                popt6, pcov6 = curve_fit(func, metric_multi, six_lod_conts, sigma=six_lod_errs)
-        except RuntimeError as e:
-            print(e)
+                popt3, pcov3 = curve_fit(func, metric_multi, three_lod_conts, sigma=three_lod_errs, maxfev = 10000)
+                popt6, pcov6 = curve_fit(func, metric_multi, six_lod_conts, sigma=six_lod_errs, maxfev = 10000)
+        except:
             print('Could not find fit')
             fit = False
 
         # axes[2].get_shared_y_axes().join(axes[2], axes[3])
-        axes[3].set_yscale('log')
+        # axes[3].set_yscale('log')
         axes[3].set_xscale('log')
         axes[3].set_xlabel(f'{param_name}/{param_name}'+r'$_\mathrm{med}$')
 
@@ -138,9 +139,10 @@ def combo_performance(maps, rad_samps, conts, metric_vals, param_name, plot_inds
         if fit:
             axes[3].plot(metric_multi, func(metric_multi, *popt3), label=r'$3\lambda/D$', c=colors[0])  #r'$3\lambda/D$: a=%5.3f, b=%5.3f, c=%5.3f' % tuple(popt3)
             axes[3].plot(metric_multi, func(metric_multi, *popt6), label=r'$6\lambda/D$', c=colors[1])
-        axes[3].errorbar(metric_multi, three_lod_conts, yerr=three_lod_errs, linewidth=0, linestyle=None,
-                         marker='o', c=colors[0])
-        axes[3].errorbar(metric_multi, six_lod_conts, yerr=six_lod_errs, linewidth=0, linestyle=None, marker='o',
+        dprint(three_lod_errs, six_lod_errs)
+        axes[3].errorbar(metric_multi, three_lod_conts, yerr=three_lod_errs, linewidth=1, fmt='.',
+                         c=colors[0])
+        axes[3].errorbar(metric_multi, six_lod_conts, yerr=six_lod_errs, linewidth=1, fmt='.',
                          c=colors[1])
         axes[3].legend(fontsize=8)
         axes[3].text(0.04, 0.9, labels[3], transform=axes[3].transAxes, fontweight='bold', color='k', fontsize=22,
@@ -161,6 +163,6 @@ def combo_performance(maps, rad_samps, conts, metric_vals, param_name, plot_inds
 
     # plt.tight_layout()
     plt.subplots_adjust(left=0.045, bottom=0.145, right=0.985, top=0.87, wspace=0.31)
-    print(os.path.join(savedir, param_name + '.pdf'))
-    fig.savefig(os.path.join(savedir, param_name + '.pdf'))
+    dprint(os.path.join(savedir, param_name.replace('$', '') + '.pdf'))
+    fig.savefig(os.path.join(savedir, param_name.replace('$', '') + '.pdf'))
     plt.show(block=True)
